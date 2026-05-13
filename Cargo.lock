@@ -760,6 +760,7 @@ dependencies = [
  "proptest",
  "rand 0.8.6",
  "sha2",
+ "subtle",
  "thiserror",
  "zstd",
 ]
