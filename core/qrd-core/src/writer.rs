@@ -1,4 +1,5 @@
 use crate::error::{QrdError, Result};
+use crate::file::build_file_image;
 use crate::parser::{build_footer, FileHeader};
 use crate::row_group::RowGroup;
 use crate::schema::Schema;
@@ -31,11 +32,17 @@ impl StreamingWriter {
     }
 
     /// Writes a row group.
-    pub fn write_row_group(&mut self, _rows: &[Vec<u8>]) -> Result<()> {
+    pub fn write_row_group(&mut self, rows: &[Vec<u8>]) -> Result<()> {
         if self.finished {
             return Err(QrdError::InvalidSchema("writer already finished".into()));
         }
-        let row_group = RowGroup::from_rows(_rows)?;
+        let column_names: Vec<&str> = self
+            .schema
+            .fields()
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect();
+        let row_group = RowGroup::from_rows_with_names(rows, &column_names)?;
         let serialized = row_group.serialize()?;
         self.row_group_count = self
             .row_group_count
@@ -55,9 +62,16 @@ impl StreamingWriter {
         &self.row_groups
     }
 
-    /// Finalizes the file.
-    pub fn finish(mut self) -> Result<Schema> {
+    /// Finalizes the file and returns a complete QRD image.
+    pub fn finish(mut self) -> Result<Vec<u8>> {
+        if self.finished {
+            return Err(QrdError::InvalidSchema("writer already finished".into()));
+        }
         self.finished = true;
-        Ok(self.schema)
+        build_file_image(&self.schema, &self.row_groups.iter().map(|bytes| {
+            // parse raw row group bytes back into RowGroup objects so the file builder
+            // can preserve canonical semantics when writing.
+            RowGroup::deserialize(bytes).expect("stored row group bytes must be valid")
+        }).collect::<Vec<_>>())
     }
 }

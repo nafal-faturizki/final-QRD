@@ -92,49 +92,98 @@ fn decode_rle(values: &[u8]) -> Result<Vec<u8>> {
         let value = *values.get(cursor).ok_or(QrdError::UnexpectedEof)?;
         cursor += 1;
 
-        output.extend(std::iter::repeat(value).take(usize::from(run_length)));
+        output.resize(output.len() + usize::from(run_length), value);
     }
     Ok(output)
 }
 
 fn encode_bit_packed(values: &[u8]) -> Result<Vec<u8>> {
-    let mut output = Vec::with_capacity(4 + values.len().div_ceil(2));
+    let mut output = Vec::new();
     let len = u32::try_from(values.len())
         .map_err(|_| QrdError::InvalidSchema("payload too large".into()))?;
-    output.extend_from_slice(&len.to_le_bytes());
+    let bit_width = if values.is_empty() {
+        0u8
+    } else {
+        values
+            .iter()
+            .copied()
+            .map(|value| {
+                let width = 8 - value.leading_zeros() as u8;
+                if width == 0 { 1 } else { width }
+            })
+            .max()
+            .unwrap_or(1)
+    };
 
-    for chunk in values.chunks(2) {
-        let first = chunk[0] & 0x0F;
-        let second = chunk.get(1).copied().unwrap_or(0) & 0x0F;
-        output.push(first | (second << 4));
+    output.extend_from_slice(&len.to_le_bytes());
+    output.push(bit_width);
+
+    if values.is_empty() {
+        return Ok(output);
     }
+
+    let total_bits = usize::from(bit_width) * values.len();
+    let mut bit_buffer = Vec::with_capacity(total_bits.div_ceil(8));
+    let mut current_byte = 0u8;
+    let mut bits_in_current = 0u8;
+
+    for value in values {
+        let mut remaining = *value;
+        for _ in 0..bit_width {
+            let bit = remaining & 1;
+            current_byte |= bit << bits_in_current;
+            bits_in_current += 1;
+            remaining >>= 1;
+            if bits_in_current == 8 {
+                bit_buffer.push(current_byte);
+                current_byte = 0;
+                bits_in_current = 0;
+            }
+        }
+    }
+
+    if bits_in_current > 0 {
+        bit_buffer.push(current_byte);
+    }
+
+    output.extend_from_slice(&bit_buffer);
     Ok(output)
 }
 
 fn decode_bit_packed(values: &[u8]) -> Result<Vec<u8>> {
-    let length_bytes = values.get(0..4).ok_or(QrdError::UnexpectedEof)?;
-    let original_len = u32::from_le_bytes([
-        length_bytes[0],
-        length_bytes[1],
-        length_bytes[2],
-        length_bytes[3],
-    ]) as usize;
+    let header = values.get(0..5).ok_or(QrdError::UnexpectedEof)?;
+    let original_len = u32::from_le_bytes([header[0], header[1], header[2], header[3]]) as usize;
+    let bit_width = header[4] as usize;
 
-    let mut output = Vec::with_capacity(original_len);
-    for byte in &values[4..] {
-        output.push(byte & 0x0F);
-        if output.len() == original_len {
-            break;
-        }
-        output.push((byte >> 4) & 0x0F);
-        if output.len() == original_len {
-            break;
-        }
+    if original_len == 0 {
+        return Ok(Vec::new());
     }
 
-    if output.len() != original_len {
+    if bit_width == 0 || bit_width > 8 {
+        return Err(QrdError::InvalidSchema("invalid bit width".into()));
+    }
+
+    let payload = values.get(5..).ok_or(QrdError::UnexpectedEof)?;
+    let total_bits = original_len.checked_mul(bit_width).ok_or_else(|| QrdError::InvalidSchema("bit stream split length overflow".into()))?;
+    let expected_bytes = total_bits.div_ceil(8);
+    if payload.len() != expected_bytes {
         return Err(QrdError::UnexpectedEof);
     }
+
+    let mut output = Vec::with_capacity(original_len);
+    let mut bit_cursor = 0;
+    for _ in 0..original_len {
+        let mut value = 0u8;
+        for bit_index in 0..bit_width {
+            let byte_index = bit_cursor / 8;
+            let bit_offset = bit_cursor % 8;
+            let bit = (payload[byte_index] >> bit_offset) & 1;
+            value |= bit << bit_index;
+            bit_cursor += 1;
+        }
+        output.push(value);
+    }
+
     Ok(output)
 }
 
@@ -246,9 +295,9 @@ fn decode_byte_stream_split(values: &[u8]) -> Result<Vec<u8>> {
     let mut output = vec![0u8; original_len];
     let mut cursor = 0usize;
     for bit_plane in 0..8 {
-        for index in 0..original_len {
+        for output_byte in output.iter_mut().take(original_len) {
             let bit = payload[cursor] & 1;
-            output[index] |= bit << bit_plane;
+            *output_byte |= bit << bit_plane;
             cursor += 1;
         }
     }
@@ -285,7 +334,7 @@ fn encode_dict_rle(values: &[u8]) -> Result<Vec<u8>> {
 }
 
 fn decode_dict_rle(values: &[u8]) -> Result<Vec<u8>> {
-    let dictionary_len = *values.get(0).ok_or(QrdError::UnexpectedEof)? as usize;
+    let dictionary_len = *values.first().ok_or(QrdError::UnexpectedEof)? as usize;
     let dictionary = values.get(1..1 + dictionary_len).ok_or(QrdError::UnexpectedEof)?;
     let length_offset = 1 + dictionary_len;
     let length_bytes = values.get(length_offset..length_offset + 4).ok_or(QrdError::UnexpectedEof)?;

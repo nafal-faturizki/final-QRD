@@ -1,11 +1,8 @@
-use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileHeader, FileFooter};
+use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileHeader};
 use qrd_core::reader::FileReader;
-use qrd_core::schema::Schema;
 use qrd_core::writer::StreamingWriter;
 use qrd_core::compression::{compress, decompress, CompressionKind};
-use qrd_core::encryption::{
-    derive_column_key, encrypt_payload, decrypt_payload, EncryptionConfig,
-};
+use qrd_core::encryption::{derive_column_key, EncryptionConfig};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 

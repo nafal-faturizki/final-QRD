@@ -107,7 +107,7 @@ mod tests {
     fn zstd_roundtrip() {
         let payload = b"hello world this is a test payload for compression";
         let compressed = compress(payload, CompressionKind::Zstd).expect("compression should work");
-        assert!(compressed.len() > 0);
+        assert!(!compressed.is_empty());
         let decompressed = decompress(&compressed, CompressionKind::Zstd)
             .expect("decompression should work");
         assert_eq!(decompressed, payload);
@@ -117,7 +117,7 @@ mod tests {
     fn lz4_roundtrip() {
         let payload = b"hello world this is a test payload for compression";
         let compressed = compress(payload, CompressionKind::Lz4).expect("compression should work");
-        assert!(compressed.len() > 0);
+        assert!(!compressed.is_empty());
         let decompressed = decompress(&compressed, CompressionKind::Lz4)
             .expect("decompression should work");
         assert_eq!(decompressed, payload);

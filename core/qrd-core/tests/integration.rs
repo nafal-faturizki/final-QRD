@@ -32,8 +32,8 @@ fn write_read_single_row_group() {
 
     let mut writer = StreamingWriter::new(schema.clone());
 
-    // Write a single row group with sample data
-    let rows = vec![vec![1u8, 2, 3], vec![4, 5, 6]];
+    // Write a single row group with sample data matching the schema fields.
+    let rows = vec![vec![1u8, 2], vec![3, 4]];
     writer.write_row_group(&rows).expect("should write row group");
 
     assert_eq!(writer.row_groups().len(), 1);
@@ -58,9 +58,9 @@ fn write_read_multiple_row_groups() {
 
     let mut writer = StreamingWriter::new(schema.clone());
 
-    // Write multiple row groups
+    // Write multiple row groups with two columns each.
     for i in 0..3 {
-        let rows = vec![vec![(i * 10) as u8; 5]; 3];
+        let rows = vec![vec![(i * 10) as u8, (i * 10 + 1) as u8]; 3];
         writer.write_row_group(&rows).expect("should write row group");
     }
 
@@ -135,6 +135,48 @@ fn reader_inspect_header_works() {
 }
 
 #[test]
+fn write_read_file_image_roundtrip() {
+    let schema = SchemaBuilder::new()
+        .add_field("device_id", FieldKind::Utf8, true)
+        .add_field("temperature", FieldKind::Float32, false)
+        .build()
+        .expect("schema should build");
+
+    let mut writer = StreamingWriter::new(schema.clone());
+    let rows = vec![vec![10u8, 20], vec![30, 40]];
+    writer.write_row_group(&rows).expect("should write row group");
+
+    let bytes = writer.finish().expect("finish should return file bytes");
+    let reader = FileReader::open(&bytes).expect("file should open");
+
+    assert_eq!(reader.schema(), &schema);
+    assert_eq!(reader.row_count(), 2);
+    assert!(reader.verify_integrity().is_ok());
+}
+
+#[test]
+fn reader_read_columns_returns_selected_values() {
+    let schema = SchemaBuilder::new()
+        .add_field("id", FieldKind::Int32, false)
+        .add_field("value", FieldKind::Utf8, true)
+        .build()
+        .expect("schema should build");
+
+    let mut writer = StreamingWriter::new(schema.clone());
+    writer
+        .write_row_group(&[vec![1, 2], vec![3, 4]])
+        .expect("should write row group");
+
+    let bytes = writer.finish().expect("finish should return file bytes");
+    let reader = FileReader::open(&bytes).expect("file should open");
+
+    let columns = reader.read_columns(&["id", "value"]).expect("should read columns");
+    assert_eq!(columns.len(), 2);
+    assert_eq!(columns[0], vec![1, 3]);
+    assert_eq!(columns[1], vec![2, 4]);
+}
+
+#[test]
 fn large_row_group_handling() {
     let schema = SchemaBuilder::new()
         .add_field("id", FieldKind::Int32, false)
@@ -143,10 +185,8 @@ fn large_row_group_handling() {
 
     let mut writer = StreamingWriter::new(schema.clone());
 
-    // Create a large row group
-    let rows: Vec<Vec<u8>> = (0..10)
-        .map(|i| vec![(i % 256) as u8; 1000])
-        .collect();
+    // Create a large row group using a single column and many rows.
+    let rows: Vec<Vec<u8>> = (0..10).map(|i| vec![(i % 256) as u8]).collect();
 
     writer.write_row_group(&rows).expect("should write large row group");
 

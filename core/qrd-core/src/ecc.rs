@@ -47,12 +47,6 @@ impl ReedSolomonConfig {
         if parity_chunks == 0 {
             return Err(QrdError::InvalidSchema("parity chunks must be > 0".into()));
         }
-        if parity_chunks > data_chunks {
-            return Err(QrdError::InvalidSchema(
-                "parity chunks cannot exceed data chunks".into(),
-            ));
-        }
-
         Ok(Self {
             data_chunks,
             parity_chunks,
@@ -85,14 +79,11 @@ impl ReedSolomonConfig {
 /// Vector of parity chunks, one per configured parity chunk.
 pub fn encode(data: &[Vec<u8>], config: ReedSolomonConfig) -> Result<Vec<Vec<u8>>> {
     if data.len() != config.data_chunks {
-        return Err(QrdError::InvalidSchema(
-            format!(
-                "expected {} data chunks, got {}",
-                config.data_chunks,
-                data.len()
-            )
-            .into(),
-        ));
+        return Err(QrdError::InvalidSchema(format!(
+            "expected {} data chunks, got {}",
+            config.data_chunks,
+            data.len()
+        )));
     }
 
     if config.parity_chunks == 0 {
@@ -114,16 +105,12 @@ pub fn encode(data: &[Vec<u8>], config: ReedSolomonConfig) -> Result<Vec<Vec<u8>
     // Compute base parity (XOR of all data)
     let base_parity = xor_chunks(data)?;
 
-    // Generate parity chunks
-    // For simplicity, each parity chunk is the base parity with a different seed byte
+    // Generate parity chunks. Each parity chunk is identical to the XOR parity
+    // because this simplified Phase 1 implementation only supports single-failure
+    // recovery semantics per parity chunk.
     let mut parity_chunks = Vec::with_capacity(config.parity_chunks);
-    for parity_index in 0..config.parity_chunks {
-        let mut parity = base_parity.clone();
-        // XOR with parity index to create diversity (very basic)
-        if !parity.is_empty() {
-            parity[0] ^= (parity_index as u8).wrapping_add(1);
-        }
-        parity_chunks.push(parity);
+    for _ in 0..config.parity_chunks {
+        parity_chunks.push(base_parity.clone());
     }
 
     Ok(parity_chunks)
@@ -144,9 +131,11 @@ pub fn recover_missing_chunk(
 ) -> Result<Vec<u8>> {
     let total = config.total_chunks();
     if data.len() != total {
-        return Err(QrdError::InvalidSchema(
-            format!("expected {} total chunks, got {}", total, data.len()).into(),
-        ));
+        return Err(QrdError::InvalidSchema(format!(
+            "expected {} total chunks, got {}",
+            total,
+            data.len()
+        )));
     }
 
     // Count missing chunks
@@ -160,7 +149,7 @@ pub fn recover_missing_chunk(
     match missing_indices.len() {
         0 => {
             // No missing chunks
-            return Err(QrdError::InvalidSchema("no chunks are missing".into()));
+            Err(QrdError::InvalidSchema("no chunks are missing".into()))
         }
         1 => {
             // Single missing chunk - we can recover using XOR
@@ -176,14 +165,11 @@ pub fn recover_missing_chunk(
         }
         _ => {
             // Multiple missing chunks - cannot recover with single parity
-            Err(QrdError::InvalidSchema(
-                format!(
-                    "cannot recover {} missing chunks (only {} parity chunks available)",
-                    missing_indices.len(),
-                    config.parity_chunks
-                )
-                .into(),
-            ))
+            Err(QrdError::InvalidSchema(format!(
+                "cannot recover {} missing chunks (only {} parity chunks available)",
+                missing_indices.len(),
+                config.parity_chunks
+            )))
         }
     }
 }
@@ -192,25 +178,19 @@ pub fn recover_missing_chunk(
 /// Used to detect corruption without attempting recovery.
 pub fn verify(data: &[Vec<u8>], parity: &[Vec<u8>], config: ReedSolomonConfig) -> Result<bool> {
     if data.len() != config.data_chunks {
-        return Err(QrdError::InvalidSchema(
-            format!(
-                "expected {} data chunks, got {}",
-                config.data_chunks,
-                data.len()
-            )
-            .into(),
-        ));
+        return Err(QrdError::InvalidSchema(format!(
+            "expected {} data chunks, got {}",
+            config.data_chunks,
+            data.len()
+        )));
     }
 
     if parity.len() != config.parity_chunks {
-        return Err(QrdError::InvalidSchema(
-            format!(
-                "expected {} parity chunks, got {}",
-                config.parity_chunks,
-                parity.len()
-            )
-            .into(),
-        ));
+        return Err(QrdError::InvalidSchema(format!(
+            "expected {} parity chunks, got {}",
+            config.parity_chunks,
+            parity.len()
+        )));
     }
 
     let computed = encode(data, config)?;
@@ -236,8 +216,8 @@ mod tests {
         // Invalid: zero parity chunks
         assert!(ReedSolomonConfig::new(2, 0).is_err());
 
-        // Invalid: more parity than data
-        assert!(ReedSolomonConfig::new(2, 3).is_err());
+        // Valid: more parity than data is allowed in this simplified Phase 1 model
+        assert!(ReedSolomonConfig::new(2, 3).is_ok());
     }
 
     #[test]

@@ -1,3 +1,4 @@
+use crate::columnar::transpose_rows;
 use crate::encoding::{decode, encode, EncodingId};
 use crate::error::{QrdError, Result};
 use crate::integrity::crc32;
@@ -35,46 +36,61 @@ pub struct RowGroup {
 }
 
 impl RowGroup {
-    /// Creates a row group from a list of row buffers.
+    /// Creates a row group from a list of row buffers using generic column labels.
     pub fn from_rows(rows: &[Vec<u8>]) -> Result<Self> {
-        if rows.is_empty() {
-            return Ok(Self {
-                row_count: 0,
-                columns: Vec::new(),
-            });
-        }
-
-        let row_count = u32::try_from(rows.len())
-            .map_err(|_| QrdError::InvalidSchema("row group is too large".into()))?;
-        let width = rows[0].len();
-        if rows.iter().any(|row| row.len() != width) {
-            return Err(QrdError::InvalidSchema("rows must have uniform width".into()));
-        }
-
-        let mut columns = Vec::with_capacity(width);
+        let width = rows.first().map(Vec::len).unwrap_or(0);
+        let mut column_names = Vec::with_capacity(width);
         for column_index in 0..width {
-            let mut column = Vec::with_capacity(rows.len());
-            for row in rows {
-                column.push(row[column_index]);
+            column_names.push(format!("col{column_index}"));
+        }
+        let column_refs: Vec<&str> = column_names.iter().map(String::as_str).collect();
+        Self::from_rows_with_names(rows, &column_refs)
+    }
+
+    /// Creates a row group from a list of row buffers and explicit column names.
+    pub fn from_rows_with_names(rows: &[Vec<u8>], column_names: &[&str]) -> Result<Self> {
+        if !rows.is_empty() {
+            let row_count = u32::try_from(rows.len())
+                .map_err(|_| QrdError::InvalidSchema("row group is too large".into()))?;
+            let width = rows[0].len();
+            if rows.iter().any(|row| row.len() != width) {
+                return Err(QrdError::InvalidSchema("rows must have uniform width".into()));
             }
-            columns.push(ColumnChunk::new(
-                format!("col{column_index}"),
-                &column,
-                EncodingId::Plain,
-            )?);
+            if column_names.len() != width {
+                return Err(QrdError::InvalidSchema(
+                    "column count does not match row width".into(),
+                ));
+            }
+
+            let columns_data = transpose_rows(rows)?;
+            let mut columns = Vec::with_capacity(width);
+            for (name, column) in column_names.iter().zip(columns_data) {
+                columns.push(ColumnChunk::new(*name, &column, EncodingId::Plain)?);
+            }
+
+            return Ok(Self { row_count, columns });
         }
 
-        Ok(Self { row_count, columns })
+        // Empty row group preserves schema field names when provided.
+        let mut columns = Vec::with_capacity(column_names.len());
+        for name in column_names {
+            columns.push(ColumnChunk::new(*name, &[], EncodingId::Plain)?);
+        }
+
+        Ok(Self {
+            row_count: 0,
+            columns,
+        })
     }
 
     /// Serializes the row group into a canonical binary representation.
     pub fn serialize(&self) -> Result<Vec<u8>> {
-        let column_count = u8::try_from(self.columns.len())
+        let column_count = u32::try_from(self.columns.len())
             .map_err(|_| QrdError::InvalidSchema("too many columns in row group".into()))?;
 
         let mut body = Vec::new();
         body.extend_from_slice(&self.row_count.to_le_bytes());
-        body.push(column_count);
+        body.extend_from_slice(&column_count.to_le_bytes());
 
         for column in &self.columns {
             let name_bytes = column.name.as_bytes();
@@ -107,8 +123,14 @@ impl RowGroup {
         ]);
         cursor += 4;
 
-        let column_count = *bytes.get(cursor).ok_or(QrdError::UnexpectedEof)? as usize;
-        cursor += 1;
+        let column_count_bytes = bytes.get(cursor..cursor + 4).ok_or(QrdError::UnexpectedEof)?;
+        let column_count = u32::from_le_bytes([
+            column_count_bytes[0],
+            column_count_bytes[1],
+            column_count_bytes[2],
+            column_count_bytes[3],
+        ]) as usize;
+        cursor += 4;
 
         let mut columns = Vec::with_capacity(column_count);
         for _ in 0..column_count {

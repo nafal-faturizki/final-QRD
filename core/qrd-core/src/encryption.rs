@@ -4,6 +4,7 @@ use aes_gcm::aead::{Aead, KeyInit};
 use hkdf::Hkdf;
 use rand::RngCore;
 use sha2::Sha256;
+use std::fmt::Write;
 
 /// Configuration for column encryption.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,12 +41,13 @@ pub fn derive_column_key(master_key: &[u8], config: &EncryptionConfig) -> Result
         return Err(QrdError::InvalidSchema("master key cannot be empty".into()));
     }
 
-    let hkdf = Hkdf::<Sha256>::new(
-        Some(&config.schema_fingerprint[..]),
-        master_key,
-    );
+    let hkdf = Hkdf::<Sha256>::new(Some(&config.schema_fingerprint[..]), master_key);
 
-    let info = format!("qrd:col:{}:{:x?}", config.column_name, config.schema_fingerprint);
+    let mut schema_hex = String::with_capacity(16);
+    for byte in &config.schema_fingerprint {
+        write!(&mut schema_hex, "{:02x}", byte).expect("hex formatting should not fail");
+    }
+    let info = format!("qrd:col:{}:{}", config.column_name, schema_hex);
     let mut key = [0u8; 32];
     
     hkdf.expand(info.as_bytes(), &mut key)
@@ -98,18 +100,9 @@ pub fn unpack_encrypted_chunk(bytes: &[u8]) -> Result<EncryptedChunk> {
 /// 3. Extracts authentication tag from cipher
 /// 4. Returns EncryptedChunk with nonce, tag, and ciphertext
 pub fn encrypt_payload(payload: &[u8], key: &[u8; 32]) -> Result<EncryptedChunk> {
-    if payload.is_empty() {
-        // Empty payloads: return empty ciphertext with valid nonce/tag
-        return Ok(EncryptedChunk {
-            nonce: generate_nonce()?,
-            auth_tag: AuthTag([0u8; 16]),
-            ciphertext: Vec::new(),
-        });
-    }
-
     let nonce = generate_nonce()?;
     let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
-    
+
     let ciphertext = cipher
         .encrypt(nonce.0.as_slice().into(), payload)
         .map_err(|e| QrdError::InvalidSchema(format!("AES-256-GCM encryption failed: {}", e)))?;
@@ -234,7 +227,7 @@ mod tests {
         let encrypted = encrypt_payload(plaintext, &key).expect("encryption should work");
 
         // Verify structure
-        assert!(encrypted.ciphertext.len() > 0);
+        assert!(!encrypted.ciphertext.is_empty());
         assert_eq!(encrypted.nonce.0.len(), 12);
         assert_eq!(encrypted.auth_tag.0.len(), 16);
 
