@@ -1,0 +1,29 @@
+   Compiling qrd-cli v0.1.0 (/workspaces/final-QRD/tools/qrd-cli)
+   Compiling qrd-wasm v0.1.0 (/workspaces/final-QRD/core/qrd-wasm)
+error: no rules expected `;`
+   --> core/qrd-wasm/tests/extended_wasm_tests.rs:323:41
+    |
+323 |         let data: Vec<u8> = vec![1, 2, 3; 1000];
+    |                                         ^ no rules expected this token in macro call
+    |
+    = note: while trying to match sequence start
+
+error: no rules expected `;`
+   --> core/qrd-wasm/tests/extended_wasm_tests.rs:330:41
+    |
+330 |         let data: Vec<u8> = vec![1, 2, 3; 1000];
+    |                                         ^ no rules expected this token in macro call
+    |
+    = note: while trying to match sequence start
+
+warning: unused import: `std::path::Path`
+  --> tools/qrd-cli/tests/extended_cli_tests.rs:11:9
+   |
+11 |     use std::path::Path;
+   |         ^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error: could not compile `qrd-wasm` (test "extended_wasm_tests") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+warning: `qrd-cli` (test "extended_cli_tests") generated 1 warning (run `cargo fix --test "extended_cli_tests" -p qrd-cli` to apply 1 suggestion)

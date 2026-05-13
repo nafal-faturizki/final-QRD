@@ -1,0 +1,408 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded ciborium-io v0.2.2
+  Downloaded block-buffer v0.10.4
+  Downloaded ciborium-ll v0.2.2
+  Downloaded rand_core v0.9.5
+  Downloaded wait-timeout v0.2.1
+  Downloaded zstd-safe v7.2.4
+  Downloaded unarray v0.1.4
+  Downloaded universal-hash v0.5.1
+  Downloaded once_cell v1.21.4
+  Downloaded quick-error v1.2.3
+  Downloaded unicode-ident v1.0.24
+  Downloaded walkdir v2.5.0
+  Downloaded zstd v0.13.3
+  Downloaded zmij v1.0.21
+  Downloaded rand v0.8.6
+  Downloaded itertools v0.10.5
+  Downloaded zerocopy-derive v0.8.48
+  Downloaded plotters v0.3.7
+  Downloaded regex v1.12.3
+  Downloaded half v2.7.1
+  Downloaded hkdf v0.12.4
+  Downloaded rayon v1.12.0
+  Downloaded typenum v1.20.0
+  Downloaded serde_derive v1.0.228
+  Downloaded rand v0.9.4
+  Downloaded syn v2.0.117
+  Downloaded zerocopy v0.8.48
+  Downloaded ppv-lite86 v0.2.21
+  Downloaded jobserver v0.1.34
+  Downloaded getrandom v0.2.17
+  Downloaded tempfile v3.27.0
+  Downloaded regex-syntax v0.8.10
+  Downloaded serde_core v1.0.228
+  Downloaded rustix v1.1.4
+  Downloaded quote v1.0.45
+  Downloaded find-msvc-tools v0.1.9
+  Downloaded thiserror-impl v1.0.69
+  Downloaded shlex v1.3.0
+  Downloaded rusty-fork v0.3.1
+  Downloaded rayon-core v1.13.0
+  Downloaded rand_chacha v0.9.0
+  Downloaded proc-macro2 v1.0.106
+  Downloaded regex-automata v0.4.14
+  Downloaded subtle v2.6.1
+  Downloaded sha2 v0.10.9
+  Downloaded serde v1.0.228
+  Downloaded plotters-backend v0.3.7
+  Downloaded fnv v1.0.7
+  Downloaded itoa v1.0.18
+  Downloaded inout v0.1.4
+  Downloaded getrandom v0.3.4
+  Downloaded clap_lex v1.1.0
+  Downloaded zstd-sys v2.0.16+zstd.1.5.7
+  Downloaded tinytemplate v1.2.1
+  Downloaded same-file v1.0.6
+  Downloaded rand_xorshift v0.4.0
+  Downloaded rand_chacha v0.3.1
+  Downloaded polyval v0.6.2
+  Downloaded opaque-debug v0.3.1
+  Downloaded memchr v2.8.0
+  Downloaded libc v0.2.186
+  Downloaded lz4-sys v1.11.1+lz4-1.10.0
+  Downloaded lz4 v1.28.1
+  Downloaded is-terminal v0.4.17
+  Downloaded ghash v0.5.1
+  Downloaded generic-array v0.14.7
+  Downloaded errno v0.3.14
+  Downloaded either v1.15.0
+  Downloaded digest v0.10.7
+  Downloaded thiserror v1.0.69
+  Downloaded proptest v1.11.0
+  Downloaded plotters-svg v0.3.7
+  Downloaded pkg-config v0.3.33
+  Downloaded oorandom v11.1.5
+  Downloaded getrandom v0.4.2
+  Downloaded fastrand v2.4.1
+  Downloaded ctr v0.9.2
+  Downloaded crypto-common v0.1.7
+  Downloaded crossbeam-utils v0.8.21
+  Downloaded crossbeam-epoch v0.9.18
+  Downloaded criterion-plot v0.5.0
+  Downloaded criterion v0.5.1
+  Downloaded crc32fast v1.5.0
+  Downloaded clap_builder v4.6.0
+  Downloaded clap v4.6.1
+  Downloaded ciborium v0.2.2
+  Downloaded aho-corasick v1.1.4
+  Downloaded aes-gcm v0.10.3
+  Downloaded version_check v0.9.5
+  Downloaded serde_json v1.0.149
+  Downloaded rand_core v0.6.4
+  Downloaded num-traits v0.2.19
+  Downloaded hmac v0.12.1
+  Downloaded aes v0.8.4
+  Downloaded crossbeam-deque v0.8.6
+  Downloaded cipher v0.4.4
+  Downloaded cc v1.2.62
+  Downloaded bitflags v2.11.1
+  Downloaded bit-set v0.8.0
+  Downloaded autocfg v1.5.0
+  Downloaded cpufeatures v0.2.17
+  Downloaded anes v0.1.6
+  Downloaded aead v0.5.2
+  Downloaded cfg-if v1.0.4
+  Downloaded cast v0.3.0
+  Downloaded bit-vec v0.8.0
+  Downloaded anstyle v1.0.14
+  Downloaded linux-raw-sys v0.12.1
+   Compiling libc v0.2.186
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling generic-array v0.14.7
+   Compiling syn v2.0.117
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling crypto-common v0.1.7
+   Compiling jobserver v0.1.34
+   Compiling zerocopy v0.8.48
+   Compiling cc v1.2.62
+   Compiling zerocopy-derive v0.8.48
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling ppv-lite86 v0.2.21
+   Compiling inout v0.1.4
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling cipher v0.4.4
+   Compiling universal-hash v0.5.1
+   Compiling lz4-sys v1.11.1+lz4-1.10.0
+   Compiling polyval v0.6.2
+   Compiling zstd-safe v7.2.4
+   Compiling thiserror v1.0.69
+   Compiling ghash v0.5.1
+   Compiling ctr v0.9.2
+   Compiling aes v0.8.4
+   Compiling hmac v0.12.1
+   Compiling rand_chacha v0.3.1
+   Compiling thiserror-impl v1.0.69
+   Compiling aead v0.5.2
+   Compiling aes-gcm v0.10.3
+   Compiling rand v0.8.6
+   Compiling hkdf v0.12.4
+   Compiling lz4 v1.28.1
+   Compiling zstd v0.13.3
+   Compiling sha2 v0.10.9
+   Compiling getrandom v0.3.4
+   Compiling num-traits v0.2.19
+   Compiling serde_core v1.0.228
+   Compiling qrd-core v0.1.0 (/workspaces/final-QRD/core/qrd-core)
+   Compiling serde v1.0.228
+   Compiling zmij v1.0.21
+   Compiling rand_core v0.9.5
+   Compiling crossbeam-epoch v0.9.18
+   Compiling serde_derive v1.0.228
+   Compiling serde_json v1.0.149
+   Compiling rayon-core v1.13.0
+   Compiling crossbeam-deque v0.8.6
+   Compiling getrandom v0.4.2
+   Compiling half v2.7.1
+   Compiling ciborium-ll v0.2.2
+   Compiling tempfile v3.27.0
+   Compiling clap_builder v4.6.0
+   Compiling regex-automata v0.4.14
+   Compiling wait-timeout v0.2.1
+   Compiling rusty-fork v0.3.1
+   Compiling criterion-plot v0.5.0
+   Compiling bit-set v0.8.0
+   Compiling rayon v1.12.0
+   Compiling regex v1.12.3
+   Compiling tinytemplate v1.2.1
+   Compiling clap v4.6.1
+   Compiling plotters v0.3.7
+   Compiling ciborium v0.2.2
+   Compiling rand_xorshift v0.4.0
+   Compiling rand_chacha v0.9.0
+   Compiling rand v0.9.4
+   Compiling is-terminal v0.4.17
+   Compiling criterion v0.5.1
+   Compiling proptest v1.11.0
+   Compiling qrd-cli v0.1.0 (/workspaces/final-QRD/tools/qrd-cli)
+   Compiling qrd-ffi v0.1.0 (/workspaces/final-QRD/core/qrd-ffi)
+   Compiling qrd-wasm v0.1.0 (/workspaces/final-QRD/core/qrd-wasm)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 35s
+     Running unittests src/lib.rs (target/debug/deps/qrd_cli-9c10498c87a3d5c5)
+
+running 2 tests
+test tests::inspect_and_verify_helpers_work_end_to_end ... ok
+test tests::keygen_and_convert_placeholders_return_output ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/qrd_inspect-5e7e4d179c92036b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/qrd_core-8579498edf878eeb)
+
+running 52 tests
+test columnar::tests::transpose_rows_rejects_mismatched_width ... ok
+test compression::tests::adaptive_chooses_correct_codec ... ok
+test compression::tests::empty_payload_returns_empty ... ok
+test compression::tests::large_payload_prefers_zstd ... ok
+test columnar::tests::transpose_rows_roundtrips_uniform_rows ... ok
+test compression::tests::small_payload_prefers_lz4 ... ok
+test compression::tests::lz4_roundtrip ... ok
+test compression::tests::zstd_roundtrip ... ok
+test ecc::tests::multi_parity_chunks_generated ... ok
+test ecc::tests::parity_chunk_is_xor_of_input ... ok
+test ecc::tests::parity_encode_rejects_width_mismatch ... ok
+test ecc::tests::recovery_rejects_multiple_missing ... ok
+test ecc::tests::rs_config_validates ... ok
+test ecc::tests::single_chunk_recovery_via_xor ... ok
+test ecc::tests::verify_detects_corrupted_parity ... ok
+test ecc::tests::verify_detects_valid_parity ... ok
+test encoding::tests::all_encodings_roundtrip ... ok
+test encoding::tests::delta_byte_array_rejects_invalid_length ... ok
+test encoding::tests::unknown_encoding_id_is_rejected ... ok
+test encryption::tests::derive_column_key_produces_different_keys_for_different_columns ... ok
+test encryption::tests::derive_column_key_requires_master_key ... ok
+test encryption::tests::empty_payload_authentication_still_verifies ... ok
+test encryption::tests::empty_payload_encryption ... ok
+test encryption::tests::encrypted_chunk_layout_roundtrips ... ok
+test encryption::tests::encryption_decryption_roundtrip ... ok
+test encryption::tests::nonce_generation_produces_unique_values ... ok
+test encryption::tests::tampered_ciphertext_rejected ... ok
+test encryption::tests::unpack_rejects_short_input ... ok
+test file::tests::file_image_handles_empty_row_groups ... ok
+test file::tests::file_image_rejects_truncated_footer_length ... ok
+test file::tests::file_image_roundtrip_is_end_to_end ... ok
+test integrity::tests::crc32_matches_known_vector ... ok
+test integrity::tests::verify_crc32_accepts_matching_checksum ... ok
+test memory::tests::reader_memory_estimate_is_bounded ... ok
+test memory::tests::writer_memory_estimate_is_bounded ... ok
+test parser::tests::footer_length_is_read_from_tail ... ok
+test memory::tests::writer_memory_estimate_overflow_is_rejected ... ok
+test parser::tests::footer_length_rejects_truncation ... ok
+test parser::tests::footer_roundtrip_is_verified ... ok
+test parser::tests::header_rejects_nonzero_reserved_field ... ok
+test parser::tests::header_rejects_wrong_magic ... ok
+test parser::tests::header_roundtrip_preserves_bytes ... ok
+test reader::tests::read_row_group_parses_serialized_row_group ... ok
+test reader::tests::reader_inspect_header_footer_and_verify_integrity ... ok
+test reader::tests::reader_open_roundtrip_reads_selected_columns ... ok
+test row_group::tests::row_group_rejects_truncated_input ... ok
+test row_group::tests::row_group_roundtrip_is_stable ... ok
+test schema::tests::fingerprint_changes_when_schema_changes ... ok
+test schema::tests::schema_rejects_truncated_input ... ok
+test schema::tests::schema_roundtrip_is_deterministic ... ok
+test writer::tests::build_footer_bytes_matches_footer_length_for_written_file ... ok
+test writer::tests::streaming_writer_can_finish_and_produce_valid_file_image ... ok
+
+test result: ok. 52 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/integration.rs (target/debug/deps/integration-57f623df81750cda)
+
+running 10 tests
+test file_header_format_version_preserved ... ok
+test file_header_magic_bytes_correct ... ok
+test header_encodes_schema_id ... ok
+test large_row_group_handling ... ok
+test reader_inspect_header_works ... ok
+test write_read_empty_file ... ok
+test reader_read_columns_returns_selected_values ... ok
+test write_read_file_image_roundtrip ... ok
+test write_read_multiple_row_groups ... ok
+test write_read_single_row_group ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/phase1.rs (target/debug/deps/phase1-915dc169769fa056)
+
+running 6 tests
+test bounded_memory_helpers_return_expected_values ... ok
+test file_header_roundtrip_is_stable ... ok
+test footer_roundtrip_is_stable ... ok
+test footer_length_trailer_is_read_from_tail ... ok
+test row_group_roundtrip_is_stable ... ok
+test full_file_image_roundtrip_is_stable ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/properties.rs (target/debug/deps/properties-82bf9779c1bcc48d)
+
+running 12 tests
+test compression_lz4_roundtrip_property ... ok
+test compression_zstd_roundtrip_property ... ok
+test encoding_bit_packed_roundtrip_property ... ok
+test encoding_byte_stream_split_roundtrip_property ... ok
+test encoding_delta_byte_array_roundtrip_property ... ok
+test encoding_dict_rle_roundtrip_property ... ok
+test encoding_plain_roundtrip_property ... ok
+test encoding_rle_roundtrip_property ... ok
+test encoding_delta_binary_roundtrip_property ... ok
+test file_header_roundtrip_property ... ok
+test schema_fingerprint_deterministic ... ok
+test encryption_roundtrip_property ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/quality.rs (target/debug/deps/quality-14aaf3a48dec303c)
+
+running 54 tests
+test column_chunk_encoding_id_stored_and_restored ... ok
+test compression_adaptive_decompresses_zstd_or_lz4 ... ok
+test compression_choose_adaptive_for_small_and_large_payloads ... ok
+test compression_invalid_lz4_payload_returns_error ... ok
+test compression_invalid_zstd_payload_returns_error ... ok
+test compression_lz4_roundtrip_reproduces_data ... ok
+test compression_recompresses_repeated_payload_more_than_once ... ok
+test compression_zstd_roundtrip_reproduces_data ... ok
+test crc32_matches_known_input_vector ... ok
+test ecc_encode_rejects_mismatched_chunk_widths ... ok
+test ecc_multi_parity_chunks_produced ... ok
+test ecc_encode_single_parity_chunk_matches_xor ... ok
+test ecc_recover_missing_data_chunk_using_parity ... ok
+test ecc_recover_rejects_too_many_missing_chunks ... ok
+test ecc_verify_rejects_corrupted_parity ... ok
+test encoding_bit_packed_roundtrips_single_value ... ok
+test encoding_bit_packed_roundtrips_max_value_range ... ok
+test encoding_byte_stream_split_preserves_bit_planes ... ok
+test encoding_byte_stream_split_rejects_invalid_length_header ... ok
+test encoding_delta_byte_array_roundtrips_empty_payload ... ok
+test encoding_delta_binary_handles_wrapping_bytes ... ok
+test encoding_dict_rle_rejects_invalid_dictionary_reference ... ok
+test encoding_dict_rle_roundtrips_low_cardinality_input ... ok
+test encoding_plain_handles_empty_and_full_payloads ... ok
+test encoding_rle_detects_truncated_payload ... ok
+test encoding_rle_preserves_repeated_patterns ... ok
+test encoding_unknown_id_is_rejected ... ok
+test encrypted_chunk_pack_unpack_roundtrips ... ok
+test encryption_encrypt_decrypt_roundtrip_for_small_payloads ... ok
+test encryption_key_derivation_changes_for_different_column_name ... ok
+test encryption_key_derivation_changes_for_different_schema_fingerprint ... ok
+test encryption_key_derivation_is_deterministic_for_same_config ... ok
+test encryption_rejects_empty_master_key_derivation ... ok
+test encryption_tamper_detects_auth_tag_modification ... ok
+test footer_length_trailer_roundtrips_for_large_length ... ok
+test parse_header_preserves_writer_version ... ok
+test parser_footer_roundtrips_known_footer ... ok
+test parser_rejects_invalid_magic_header ... ok
+test parser_rejects_nonzero_reserved_header ... ok
+test parser_rejects_truncated_footer ... ok
+test parser_rejects_truncated_footer_length ... ok
+test row_group_column_chunk_names_are_preserved ... ok
+test row_group_column_chunk_payloads_decode_correctly ... ok
+test row_group_detects_trailing_bytes ... ok
+test row_group_rejects_checksum_mismatch ... ok
+test row_group_rejects_rows_with_nonuniform_width ... ok
+test row_group_roundtrips_with_custom_column_names ... ok
+test encryption_tamper_detects_ciphertext_modification ... ok
+test row_group_serializes_and_deserializes_empty_group ... ok
+test row_group_serializes_large_width_group ... ok
+test schema_builder_rejects_duplicate_field_names ... ok
+test schema_fingerprint_changes_when_field_order_changes ... ok
+test transpose_rows_rejects_empty_nested_rows ... ok
+test transpose_rows_roundtrips_wide_rows ... ok
+
+test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (target/debug/deps/qrd_ffi-0192d75798f2a2cf)
+
+running 3 tests
+test tests::ffi_footer_length_parser_roundtrips ... ok
+test tests::ffi_header_parser_roundtrips ... ok
+test tests::header_size_matches_core_contract ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/qrd_wasm-43464663e91c198d)
+
+running 6 tests
+test tests::wasm_compression_roundtrip ... ok
+test tests::wasm_encryption_roundtrip ... ok
+test tests::wasm_header_inspection_roundtrips ... ok
+test tests::wasm_footer_length_inspection_roundtrips ... ok
+test tests::wasm_layer_initializes ... ok
+test tests::wasm_serialize_header ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests qrd_cli
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests qrd_core
+
+running 1 test
+test core/qrd-core/src/lib.rs - version (line 27) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+   Doc-tests qrd_ffi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests qrd_wasm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

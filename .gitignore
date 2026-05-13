@@ -1,20 +1,59 @@
 # Rust artifacts
 /target/
 **/target/
+Cargo.lock
+*.rlib
+*.rmeta
 
 # Editor files
 .vscode/
+.vscode-server/
 .idea/
 *.swp
 *~
+*.swo
+*.iml
+.sublime-project
+.sublime-workspace
 
 # OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
 # Python build/artifacts
 __pycache__/
 *.py[cod]
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
 
 # Node.js artifacts
 node_modules/
@@ -22,10 +61,62 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
+.npm
+.eslintcache
+.node_repl_history
 
 # WASM build outputs
 pkg/
 *.wasm
+wasm-pack.log
 
 # Generated files
 *.log
+logs/
+*.swp
+*.swo
+*~
+.tmp
+
+# Build artifacts
+*.o
+*.a
+*.lib
+*.dylib
+*.dll
+*.exe
+*.out
+
+# IDE temporary files
+.vscode-remote/
+.devcontainer/
+.remoteTunnelProvider
+
+# Test coverage & benchmarks
+coverage/
+*.profdata
+perf-*.data
+flamegraph.svg
+
+# Temporary files
+.DS_Store
+*.bak
+*.tmp
+*.temp
+*_backup
+
+# Cache files
+.cache/
+.git/
+.gitignore
+.env
+.env.local
+.env.*.local
+
+# Dependency folders (optional, but large)
+.cargo/
+
+# CI/CD
+.github/workflows/
+.gitlab-ci.yml
+.travis.yml
