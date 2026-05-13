@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "core/qrd-core",
+    "core/qrd-ffi",
+    "core/qrd-wasm",
+    "tools/qrd-cli",
+]
+resolver = "2"

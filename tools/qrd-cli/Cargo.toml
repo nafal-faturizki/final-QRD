@@ -1,0 +1,15 @@
+[package]
+name = "qrd-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "qrd-inspect"
+path = "src/main.rs"
+
+[lib]
+name = "qrd_cli"
+path = "src/lib.rs"
+
+[dependencies]
+qrd-core = { path = "../../core/qrd-core" }

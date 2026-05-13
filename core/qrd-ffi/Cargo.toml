@@ -1,0 +1,12 @@
+[package]
+name = "qrd-ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "qrd_ffi"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+qrd-core = { path = "../qrd-core" }

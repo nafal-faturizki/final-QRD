@@ -1,0 +1,15 @@
+[package]
+name = "qrd-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "qrd_core"
+path = "src/lib.rs"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "core_bench"
+harness = false
