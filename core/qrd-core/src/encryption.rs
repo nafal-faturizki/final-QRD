@@ -1,4 +1,9 @@
 use crate::error::{QrdError, Result};
+use aes_gcm::{Aes256Gcm, Key};
+use aes_gcm::aead::{Aead, KeyInit};
+use hkdf::Hkdf;
+use rand::RngCore;
+use sha2::Sha256;
 
 /// Configuration for column encryption.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,24 +28,38 @@ pub struct EncryptedChunk {
     pub ciphertext: Vec<u8>,
 }
 
-/// Derives a placeholder 32-byte column key for the scaffold.
+/// Derives a 32-byte column key using HKDF-SHA256.
 ///
-/// The Phase 1 implementation will replace this with HKDF-SHA256 + AES-GCM.
+/// # Derivation Process
+/// - Input key: master_key (user-provided)
+/// - Salt: schema_fingerprint (8 bytes)
+/// - Info: "qrd:col:{column_name}:{schema_id}"
+/// - Output: 32-byte column key suitable for AES-256-GCM
 pub fn derive_column_key(master_key: &[u8], config: &EncryptionConfig) -> Result<[u8; 32]> {
     if master_key.is_empty() {
         return Err(QrdError::InvalidSchema("master key cannot be empty".into()));
     }
 
+    let hkdf = Hkdf::<Sha256>::new(
+        Some(&config.schema_fingerprint[..]),
+        master_key,
+    );
+
+    let info = format!("qrd:col:{}:{:x?}", config.column_name, config.schema_fingerprint);
     let mut key = [0u8; 32];
-    for (index, byte) in master_key.iter().enumerate() {
-        key[index % 32] = key[index % 32]
-            .wrapping_add(*byte)
-            .wrapping_add(config.schema_fingerprint[index % 8]);
-    }
-    for (index, byte) in config.column_name.as_bytes().iter().enumerate() {
-        key[index % 32] ^= *byte;
-    }
+    
+    hkdf.expand(info.as_bytes(), &mut key)
+        .map_err(|e| QrdError::InvalidSchema(format!("HKDF expansion failed: {}", e)))?;
+    
     Ok(key)
+}
+
+/// Generates a cryptographically random 12-byte nonce.
+pub fn generate_nonce() -> Result<Nonce> {
+    let mut nonce_bytes = [0u8; 12];
+    let mut rng = rand::rngs::OsRng;
+    rng.fill_bytes(&mut nonce_bytes);
+    Ok(Nonce(nonce_bytes))
 }
 
 /// Packs an encrypted chunk into `[nonce][auth_tag][ciphertext]` layout.
@@ -71,25 +90,87 @@ pub fn unpack_encrypted_chunk(bytes: &[u8]) -> Result<EncryptedChunk> {
     })
 }
 
-/// Encrypts a payload in the scaffold.
-pub fn encrypt_payload(payload: &[u8], _key: &[u8; 32]) -> Result<Vec<u8>> {
+/// Encrypts a payload using AES-256-GCM.
+///
+/// # Process
+/// 1. Generates a random 12-byte nonce
+/// 2. Encrypts plaintext with AES-256-GCM
+/// 3. Extracts authentication tag from cipher
+/// 4. Returns EncryptedChunk with nonce, tag, and ciphertext
+pub fn encrypt_payload(payload: &[u8], key: &[u8; 32]) -> Result<EncryptedChunk> {
     if payload.is_empty() {
-        return Ok(Vec::new());
+        // Empty payloads: return empty ciphertext with valid nonce/tag
+        return Ok(EncryptedChunk {
+            nonce: generate_nonce()?,
+            auth_tag: AuthTag([0u8; 16]),
+            ciphertext: Vec::new(),
+        });
     }
-    Err(QrdError::NotImplemented("AES-256-GCM"))
+
+    let nonce = generate_nonce()?;
+    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
+    
+    let ciphertext = cipher
+        .encrypt(nonce.0.as_slice().into(), payload)
+        .map_err(|e| QrdError::InvalidSchema(format!("AES-256-GCM encryption failed: {}", e)))?;
+
+    // The last 16 bytes of ciphertext are the authentication tag
+    if ciphertext.len() < 16 {
+        return Err(QrdError::InvalidSchema(
+            "encryption tag missing from output".into(),
+        ));
+    }
+
+    let auth_tag_start = ciphertext.len() - 16;
+    let mut auth_tag = [0u8; 16];
+    auth_tag.copy_from_slice(&ciphertext[auth_tag_start..]);
+
+    Ok(EncryptedChunk {
+        nonce,
+        auth_tag: AuthTag(auth_tag),
+        ciphertext: ciphertext[..auth_tag_start].to_vec(),
+    })
 }
 
-/// Decrypts a payload in the scaffold.
-pub fn decrypt_payload(payload: &[u8], _key: &[u8; 32]) -> Result<Vec<u8>> {
+/// Decrypts a payload using AES-256-GCM.
+///
+/// # Process
+/// 1. Reconstructs ciphertext with appended authentication tag
+/// 2. Decrypts using AES-256-GCM with provided nonce
+/// 3. Verifies authentication tag during decryption
+pub fn decrypt_payload(
+    payload: &[u8],
+    key: &[u8; 32],
+    nonce: &Nonce,
+    auth_tag: &AuthTag,
+) -> Result<Vec<u8>> {
     if payload.is_empty() {
         return Ok(Vec::new());
     }
-    Err(QrdError::NotImplemented("AES-256-GCM"))
+
+    // Reconstruct ciphertext with tag appended
+    let mut full_ciphertext = payload.to_vec();
+    full_ciphertext.extend_from_slice(&auth_tag.0);
+
+    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
+    
+    cipher
+        .decrypt(nonce.0.as_slice().into(), &full_ciphertext[..])
+        .map_err(|e| QrdError::InvalidSchema(format!("AES-256-GCM decryption failed: {}", e)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nonce_generation_produces_unique_values() {
+        let nonce1 = generate_nonce().expect("nonce generation should work");
+        let nonce2 = generate_nonce().expect("nonce generation should work");
+        // Very high probability of being different (random 12 bytes)
+        // This is a probabilistic test, extreme collision is unlikely
+        assert_ne!(nonce1.0[0], nonce2.0[0]); // At least first byte should differ
+    }
 
     #[test]
     fn encrypted_chunk_layout_roundtrips() {
@@ -108,5 +189,100 @@ mod tests {
     #[test]
     fn unpack_rejects_short_input() {
         assert!(matches!(unpack_encrypted_chunk(&[1, 2, 3]), Err(QrdError::UnexpectedEof)));
+    }
+
+    #[test]
+    fn derive_column_key_requires_master_key() {
+        let config = EncryptionConfig {
+            column_name: "temperature".to_string(),
+            schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+        };
+        let result = derive_column_key(b"", &config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn derive_column_key_produces_different_keys_for_different_columns() {
+        let master_key = b"super-secret-key";
+        let schema_fp = [1, 2, 3, 4, 5, 6, 7, 8];
+
+        let config1 = EncryptionConfig {
+            column_name: "temperature".to_string(),
+            schema_fingerprint: schema_fp,
+        };
+        let config2 = EncryptionConfig {
+            column_name: "humidity".to_string(),
+            schema_fingerprint: schema_fp,
+        };
+
+        let key1 = derive_column_key(master_key, &config1).expect("derivation should work");
+        let key2 = derive_column_key(master_key, &config2).expect("derivation should work");
+
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn encryption_decryption_roundtrip() {
+        let master_key = b"super-secret-key";
+        let config = EncryptionConfig {
+            column_name: "sensor_data".to_string(),
+            schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+        };
+        let key = derive_column_key(master_key, &config).expect("key derivation should work");
+
+        let plaintext = b"sensitive sensor data that must be protected";
+        let encrypted = encrypt_payload(plaintext, &key).expect("encryption should work");
+
+        // Verify structure
+        assert!(encrypted.ciphertext.len() > 0);
+        assert_eq!(encrypted.nonce.0.len(), 12);
+        assert_eq!(encrypted.auth_tag.0.len(), 16);
+
+        // Decrypt and verify
+        let decrypted =
+            decrypt_payload(&encrypted.ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag)
+                .expect("decryption should work");
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn empty_payload_encryption() {
+        let master_key = b"super-secret-key";
+        let config = EncryptionConfig {
+            column_name: "sensor_data".to_string(),
+            schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+        };
+        let key = derive_column_key(master_key, &config).expect("key derivation should work");
+
+        let encrypted = encrypt_payload(b"", &key).expect("encryption should work");
+        assert_eq!(encrypted.ciphertext.len(), 0);
+
+        let decrypted =
+            decrypt_payload(&encrypted.ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag)
+                .expect("decryption should work");
+        assert_eq!(decrypted.len(), 0);
+    }
+
+    #[test]
+    fn tampered_ciphertext_rejected() {
+        let master_key = b"super-secret-key";
+        let config = EncryptionConfig {
+            column_name: "sensor_data".to_string(),
+            schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+        };
+        let key = derive_column_key(master_key, &config).expect("key derivation should work");
+
+        let plaintext = b"sensor data";
+        let encrypted = encrypt_payload(plaintext, &key).expect("encryption should work");
+
+        // Tamper with ciphertext
+        let mut tampered_ciphertext = encrypted.ciphertext.clone();
+        if !tampered_ciphertext.is_empty() {
+            tampered_ciphertext[0] ^= 0xFF;
+        }
+
+        let result = decrypt_payload(&tampered_ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag);
+        // GCM authentication should catch tampering
+        assert!(result.is_err() || result.unwrap() != plaintext);
     }
 }

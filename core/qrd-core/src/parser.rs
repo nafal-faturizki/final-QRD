@@ -183,6 +183,7 @@ pub fn parse_footer(bytes: &[u8]) -> Result<FileFooter> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::{SchemaBuilder, FieldKind};
 
     #[test]
     fn header_roundtrip_preserves_bytes() {

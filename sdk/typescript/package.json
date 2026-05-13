@@ -3,14 +3,33 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "QRD TypeScript SDK scaffold",
+  "description": "QRD TypeScript SDK - Privacy-native columnar container for browsers and Node.js",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test"
+    "test": "node --test test/*.test.js",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "qrd-wasm": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "typescript": "^5.8.0"
-  }
+  },
+  "keywords": [
+    "qrd",
+    "columnar",
+    "encryption",
+    "privacy",
+    "analytics",
+    "wasm"
+  ]
 }
