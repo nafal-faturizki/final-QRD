@@ -68,10 +68,72 @@ impl StreamingWriter {
             return Err(QrdError::InvalidSchema("writer already finished".into()));
         }
         self.finished = true;
-        build_file_image(&self.schema, &self.row_groups.iter().map(|bytes| {
-            // parse raw row group bytes back into RowGroup objects so the file builder
-            // can preserve canonical semantics when writing.
-            RowGroup::deserialize(bytes).expect("stored row group bytes must be valid")
-        }).collect::<Vec<_>>())
+        build_file_image(
+            &self.schema,
+            &self
+                .row_groups
+                .iter()
+                .map(|bytes| {
+                    // parse raw row group bytes back into RowGroup objects so the file builder
+                    // can preserve canonical semantics when writing.
+                    RowGroup::deserialize(bytes).expect("stored row group bytes must be valid")
+                })
+                .collect::<Vec<_>>(),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reader::FileReader;
+    use crate::schema::{FieldKind, SchemaBuilder};
+
+    #[test]
+    fn streaming_writer_can_finish_and_produce_valid_file_image() {
+        let schema = SchemaBuilder::new()
+            .add_field("device_id", FieldKind::Utf8, true)
+            .add_field("status", FieldKind::Int32, false)
+            .build()
+            .expect("schema should build");
+
+        let mut writer = StreamingWriter::new(schema.clone());
+        writer
+            .write_row_group(&[vec![1, 2], vec![3, 4]])
+            .expect("write row group should work");
+
+        assert_eq!(writer.row_groups().len(), 1);
+
+        let bytes = writer.finish().expect("finish should succeed");
+        let reader = FileReader::open(&bytes).expect("file image should open");
+
+        assert_eq!(reader.footer().row_group_count, 1);
+        assert_eq!(reader.row_count(), 2);
+    }
+
+    #[test]
+    fn build_footer_bytes_matches_footer_length_for_written_file() {
+        let schema = SchemaBuilder::new()
+            .add_field("a", FieldKind::Int32, true)
+            .build()
+            .expect("schema should build");
+
+        let mut writer = StreamingWriter::new(schema.clone());
+        writer
+            .write_row_group(&[vec![42]])
+            .expect("write row group");
+
+        let footer_bytes = writer
+            .build_footer_bytes()
+            .expect("footer bytes should build");
+        assert!(
+            footer_bytes.len() >= 4,
+            "footer bytes should contain a canonical footer length"
+        );
+
+        let parsed_footer =
+            crate::footer::parse_footer(&footer_bytes).expect("footer should parse");
+        assert_eq!(parsed_footer.row_group_count, 1);
+        assert_eq!(parsed_footer.schema, schema);
     }
 }

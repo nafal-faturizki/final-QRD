@@ -1,8 +1,8 @@
+use qrd_core::compression::{compress, decompress, CompressionKind};
+use qrd_core::encryption::{derive_column_key, EncryptionConfig};
 use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileHeader};
 use qrd_core::reader::FileReader;
 use qrd_core::writer::StreamingWriter;
-use qrd_core::compression::{compress, decompress, CompressionKind};
-use qrd_core::encryption::{derive_column_key, EncryptionConfig};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
@@ -132,10 +132,7 @@ pub extern "C" fn qrd_parse_footer_length(
 /// Parses a canonical QRD footer from raw bytes.
 /// Returns QRD_OK on success, QRD_INVALID_FORMAT on failure.
 #[no_mangle]
-pub extern "C" fn qrd_parse_footer(
-    bytes_ptr: *const u8,
-    bytes_len: usize,
-) -> i32 {
+pub extern "C" fn qrd_parse_footer(bytes_ptr: *const u8, bytes_len: usize) -> i32 {
     if bytes_ptr.is_null() {
         return QRD_INVALID_ARGUMENT;
     }
@@ -202,7 +199,9 @@ pub extern "C" fn qrd_decompress_zstd(
     out_decompressed_ptr: *mut u8,
     out_decompressed_len_ptr: *mut usize,
 ) -> i32 {
-    if compressed_ptr.is_null() || out_decompressed_ptr.is_null() || out_decompressed_len_ptr.is_null()
+    if compressed_ptr.is_null()
+        || out_decompressed_ptr.is_null()
+        || out_decompressed_len_ptr.is_null()
     {
         return QRD_INVALID_ARGUMENT;
     }
@@ -250,7 +249,9 @@ pub extern "C" fn qrd_derive_column_key(
     schema_fingerprint: *const u8,
     out_key: *mut u8,
 ) -> i32 {
-    if master_key_ptr.is_null() || column_name.is_null() || schema_fingerprint.is_null()
+    if master_key_ptr.is_null()
+        || column_name.is_null()
+        || schema_fingerprint.is_null()
         || out_key.is_null()
     {
         return QRD_INVALID_ARGUMENT;

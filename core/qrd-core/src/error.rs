@@ -15,6 +15,7 @@ pub enum QrdError {
     UnsupportedCompression(u8),
     InvalidSchema(String),
     UnexpectedEof,
+    AuthenticationFailed,
     NotImplemented(&'static str),
 }
 
@@ -31,6 +32,7 @@ impl fmt::Display for QrdError {
             }
             Self::InvalidSchema(message) => write!(f, "invalid schema: {message}"),
             Self::UnexpectedEof => f.write_str("unexpected end of input"),
+            Self::AuthenticationFailed => f.write_str("authentication failed"),
             Self::NotImplemented(feature) => write!(f, "feature not implemented: {feature}"),
         }
     }

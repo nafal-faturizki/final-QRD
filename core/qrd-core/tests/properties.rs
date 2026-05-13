@@ -3,9 +3,7 @@
 
 use qrd_core::compression::{compress, decompress, CompressionKind};
 use qrd_core::encoding::{decode, encode, EncodingId};
-use qrd_core::encryption::{
-    decrypt_payload, derive_column_key, encrypt_payload, EncryptionConfig,
-};
+use qrd_core::encryption::{decrypt_payload, derive_column_key, encrypt_payload, EncryptionConfig};
 use qrd_core::parser::{parse_header, FileHeader};
 use qrd_core::schema::{FieldKind, SchemaBuilder};
 
@@ -23,7 +21,11 @@ fn encoding_plain_roundtrip_property() {
     for sample in samples {
         let encoded = encode(&sample, EncodingId::Plain).expect("encoding should work");
         let decoded = decode(&encoded, EncodingId::Plain).expect("decoding should work");
-        assert_eq!(decoded, sample, "PLAIN encoding roundtrip failed for {:?}", sample);
+        assert_eq!(
+            decoded, sample,
+            "PLAIN encoding roundtrip failed for {:?}",
+            sample
+        );
     }
 }
 
@@ -41,7 +43,11 @@ fn encoding_rle_roundtrip_property() {
     for sample in samples {
         let encoded = encode(&sample, EncodingId::Rle).expect("encoding should work");
         let decoded = decode(&encoded, EncodingId::Rle).expect("decoding should work");
-        assert_eq!(decoded, sample, "RLE encoding roundtrip failed for {:?}", sample);
+        assert_eq!(
+            decoded, sample,
+            "RLE encoding roundtrip failed for {:?}",
+            sample
+        );
     }
 }
 
@@ -100,8 +106,7 @@ fn encoding_delta_byte_array_roundtrip_property() {
     ];
 
     for sample in samples {
-        let encoded =
-            encode(&sample, EncodingId::DeltaByteArray).expect("encoding should work");
+        let encoded = encode(&sample, EncodingId::DeltaByteArray).expect("encoding should work");
         let decoded = decode(&encoded, EncodingId::DeltaByteArray).expect("decoding should work");
         assert_eq!(
             decoded, sample,
@@ -165,12 +170,12 @@ fn compression_zstd_roundtrip_property() {
     ];
 
     for sample in samples {
-        let compressed =
-            compress(&sample, CompressionKind::Zstd).expect("compression should work");
+        let compressed = compress(&sample, CompressionKind::Zstd).expect("compression should work");
         let decompressed =
             decompress(&compressed, CompressionKind::Zstd).expect("decompression should work");
         assert_eq!(
-            decompressed, sample,
+            decompressed,
+            sample,
             "ZSTD roundtrip failed for {} bytes",
             sample.len()
         );
@@ -193,7 +198,8 @@ fn compression_lz4_roundtrip_property() {
         let decompressed =
             decompress(&compressed, CompressionKind::Lz4).expect("decompression should work");
         assert_eq!(
-            decompressed, sample,
+            decompressed,
+            sample,
             "LZ4 roundtrip failed for {} bytes",
             sample.len()
         );
@@ -220,10 +226,16 @@ fn encryption_roundtrip_property() {
 
     for sample in samples {
         let encrypted = encrypt_payload(&sample, &key).expect("encryption should work");
-        let decrypted = decrypt_payload(&encrypted.ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag)
-            .expect("decryption should work");
+        let decrypted = decrypt_payload(
+            &encrypted.ciphertext,
+            &key,
+            &encrypted.nonce,
+            &encrypted.auth_tag,
+        )
+        .expect("decryption should work");
         assert_eq!(
-            decrypted, sample,
+            decrypted,
+            sample,
             "AES-256-GCM roundtrip failed for {} bytes",
             sample.len()
         );

@@ -58,16 +58,14 @@ pub fn decompress(payload: &[u8], kind: CompressionKind) -> Result<Vec<u8>> {
 
 /// Compresses payload using Zstandard.
 fn compress_zstd(payload: &[u8]) -> Result<Vec<u8>> {
-    zstd::encode_all(payload, 3).map_err(|e| {
-        QrdError::InvalidSchema(format!("ZSTD compression failed: {}", e))
-    })
+    zstd::encode_all(payload, 3)
+        .map_err(|e| QrdError::InvalidSchema(format!("ZSTD compression failed: {}", e)))
 }
 
 /// Decompresses payload using Zstandard.
 fn decompress_zstd(payload: &[u8]) -> Result<Vec<u8>> {
-    zstd::decode_all(payload).map_err(|e| {
-        QrdError::InvalidSchema(format!("ZSTD decompression failed: {}", e))
-    })
+    zstd::decode_all(payload)
+        .map_err(|e| QrdError::InvalidSchema(format!("ZSTD decompression failed: {}", e)))
 }
 
 /// Compresses payload using LZ4.
@@ -99,8 +97,14 @@ mod tests {
 
     #[test]
     fn empty_payload_returns_empty() {
-        assert_eq!(compress(b"", CompressionKind::Zstd).unwrap(), vec![] as Vec<u8>);
-        assert_eq!(decompress(b"", CompressionKind::Zstd).unwrap(), vec![] as Vec<u8>);
+        assert_eq!(
+            compress(b"", CompressionKind::Zstd).unwrap(),
+            vec![] as Vec<u8>
+        );
+        assert_eq!(
+            decompress(b"", CompressionKind::Zstd).unwrap(),
+            vec![] as Vec<u8>
+        );
     }
 
     #[test]
@@ -108,8 +112,8 @@ mod tests {
         let payload = b"hello world this is a test payload for compression";
         let compressed = compress(payload, CompressionKind::Zstd).expect("compression should work");
         assert!(!compressed.is_empty());
-        let decompressed = decompress(&compressed, CompressionKind::Zstd)
-            .expect("decompression should work");
+        let decompressed =
+            decompress(&compressed, CompressionKind::Zstd).expect("decompression should work");
         assert_eq!(decompressed, payload);
     }
 
@@ -118,18 +122,18 @@ mod tests {
         let payload = b"hello world this is a test payload for compression";
         let compressed = compress(payload, CompressionKind::Lz4).expect("compression should work");
         assert!(!compressed.is_empty());
-        let decompressed = decompress(&compressed, CompressionKind::Lz4)
-            .expect("decompression should work");
+        let decompressed =
+            decompress(&compressed, CompressionKind::Lz4).expect("decompression should work");
         assert_eq!(decompressed, payload);
     }
 
     #[test]
     fn adaptive_chooses_correct_codec() {
         let small_payload = b"small";
-        let compressed = compress(small_payload, CompressionKind::Adaptive)
-            .expect("compression should work");
-        let decompressed = decompress(&compressed, CompressionKind::Adaptive)
-            .expect("decompression should work");
+        let compressed =
+            compress(small_payload, CompressionKind::Adaptive).expect("compression should work");
+        let decompressed =
+            decompress(&compressed, CompressionKind::Adaptive).expect("decompression should work");
         assert_eq!(decompressed, small_payload);
     }
 }

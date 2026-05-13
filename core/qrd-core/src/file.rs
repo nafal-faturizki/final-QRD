@@ -1,5 +1,8 @@
 use crate::error::{QrdError, Result};
-use crate::parser::{append_footer_length, build_footer, parse_footer, parse_header, FileFooter, FileHeader, HEADER_SIZE};
+use crate::parser::{
+    append_footer_length, build_footer, parse_footer, parse_header, FileFooter, FileHeader,
+    HEADER_SIZE,
+};
 use crate::row_group::RowGroup;
 use crate::schema::Schema;
 use std::convert::TryFrom;
@@ -26,9 +29,11 @@ pub fn build_file_image(schema: &Schema, row_groups: &[RowGroup]) -> Result<Vec<
         bytes.extend_from_slice(&serialized);
     }
 
-    let footer = build_footer(schema, u32::try_from(row_groups.len()).map_err(|_| {
-        QrdError::InvalidSchema("too many row groups".into())
-    })?)?;
+    let footer = build_footer(
+        schema,
+        u32::try_from(row_groups.len())
+            .map_err(|_| QrdError::InvalidSchema("too many row groups".into()))?,
+    )?;
     let footer_length = u32::try_from(footer.len())
         .map_err(|_| QrdError::InvalidSchema("footer too large".into()))?;
     bytes.extend_from_slice(&footer);
@@ -57,13 +62,11 @@ pub fn parse_file_image(bytes: &[u8]) -> Result<ParsedFile> {
     let mut row_groups = Vec::new();
     let mut cursor = HEADER_SIZE;
     while cursor < footer_start {
-        let len_bytes = bytes.get(cursor..cursor + 4).ok_or(QrdError::UnexpectedEof)?;
-        let row_group_len = u32::from_le_bytes([
-            len_bytes[0],
-            len_bytes[1],
-            len_bytes[2],
-            len_bytes[3],
-        ]) as usize;
+        let len_bytes = bytes
+            .get(cursor..cursor + 4)
+            .ok_or(QrdError::UnexpectedEof)?;
+        let row_group_len =
+            u32::from_le_bytes([len_bytes[0], len_bytes[1], len_bytes[2], len_bytes[3]]) as usize;
         cursor += 4;
 
         let end = cursor

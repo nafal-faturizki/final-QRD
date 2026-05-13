@@ -1,8 +1,8 @@
 // Integration tests for complete QRD write/read cycles
 
 use qrd_core::reader::FileReader;
-use qrd_core::writer::StreamingWriter;
 use qrd_core::schema::{FieldKind, SchemaBuilder};
+use qrd_core::writer::StreamingWriter;
 
 #[test]
 fn write_read_empty_file() {
@@ -34,7 +34,9 @@ fn write_read_single_row_group() {
 
     // Write a single row group with sample data matching the schema fields.
     let rows = vec![vec![1u8, 2], vec![3, 4]];
-    writer.write_row_group(&rows).expect("should write row group");
+    writer
+        .write_row_group(&rows)
+        .expect("should write row group");
 
     assert_eq!(writer.row_groups().len(), 1);
 
@@ -44,7 +46,9 @@ fn write_read_single_row_group() {
     // Reader should be able to parse the row groups
     let reader = FileReader::new(schema);
     let serialized_rg = &writer.row_groups()[0];
-    let parsed_rg = reader.read_row_group(serialized_rg).expect("row group should parse");
+    let parsed_rg = reader
+        .read_row_group(serialized_rg)
+        .expect("row group should parse");
     assert!(!parsed_rg.columns.is_empty());
 }
 
@@ -61,14 +65,18 @@ fn write_read_multiple_row_groups() {
     // Write multiple row groups with two columns each.
     for i in 0..3 {
         let rows = vec![vec![(i * 10) as u8, (i * 10 + 1) as u8]; 3];
-        writer.write_row_group(&rows).expect("should write row group");
+        writer
+            .write_row_group(&rows)
+            .expect("should write row group");
     }
 
     assert_eq!(writer.row_groups().len(), 3);
 
     let reader = FileReader::new(schema);
     for serialized_rg in writer.row_groups() {
-        let parsed_rg = reader.read_row_group(serialized_rg).expect("row group should parse");
+        let parsed_rg = reader
+            .read_row_group(serialized_rg)
+            .expect("row group should parse");
         assert!(!parsed_rg.columns.is_empty());
     }
 }
@@ -144,7 +152,9 @@ fn write_read_file_image_roundtrip() {
 
     let mut writer = StreamingWriter::new(schema.clone());
     let rows = vec![vec![10u8, 20], vec![30, 40]];
-    writer.write_row_group(&rows).expect("should write row group");
+    writer
+        .write_row_group(&rows)
+        .expect("should write row group");
 
     let bytes = writer.finish().expect("finish should return file bytes");
     let reader = FileReader::open(&bytes).expect("file should open");
@@ -170,7 +180,9 @@ fn reader_read_columns_returns_selected_values() {
     let bytes = writer.finish().expect("finish should return file bytes");
     let reader = FileReader::open(&bytes).expect("file should open");
 
-    let columns = reader.read_columns(&["id", "value"]).expect("should read columns");
+    let columns = reader
+        .read_columns(&["id", "value"])
+        .expect("should read columns");
     assert_eq!(columns.len(), 2);
     assert_eq!(columns[0], vec![1, 3]);
     assert_eq!(columns[1], vec![2, 4]);
@@ -188,7 +200,9 @@ fn large_row_group_handling() {
     // Create a large row group using a single column and many rows.
     let rows: Vec<Vec<u8>> = (0..10).map(|i| vec![(i % 256) as u8]).collect();
 
-    writer.write_row_group(&rows).expect("should write large row group");
+    writer
+        .write_row_group(&rows)
+        .expect("should write large row group");
 
     let reader = FileReader::new(schema);
     let parsed_rg = reader

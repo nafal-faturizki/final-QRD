@@ -1,6 +1,9 @@
+use qrd_cli::{
+    convert_placeholder, inspect_file, inspect_footer_only, inspect_json, keygen_placeholder,
+    verify_file,
+};
 use std::env;
 use std::path::Path;
-use qrd_cli::{convert_placeholder, inspect_file, inspect_footer_only, inspect_json, keygen_placeholder, verify_file};
 
 fn print_help() {
     println!("QRD CLI");

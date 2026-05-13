@@ -3,7 +3,7 @@ use qrd_core::compression::{compress, decompress, CompressionKind};
 use qrd_core::encoding::{decode, encode, EncodingId};
 use qrd_core::encryption::{decrypt_payload, derive_column_key, encrypt_payload, EncryptionConfig};
 use qrd_core::integrity::crc32;
-use qrd_core::schema::{FieldKind, SchemaBuilder};
+use qrd_core::schema::FieldKind;
 
 fn benchmark_crc32(c: &mut Criterion) {
     c.bench_function("crc32_small_payload", |b| {
@@ -23,8 +23,8 @@ fn benchmark_schema_fingerprint(c: &mut Criterion) {
     c.bench_function("schema_fingerprint", |b| {
         b.iter(|| {
             let schema = qrd_core::schema::SchemaBuilder::new()
-                .add_field("device_id", qrd_core::schema::FieldKind::Utf8, true)
-                .add_field("temperature", qrd_core::schema::FieldKind::Float32, false)
+                .add_field("device_id", FieldKind::Utf8, true)
+                .add_field("temperature", FieldKind::Float32, false)
                 .build()
                 .expect("schema should build");
             black_box(schema.fingerprint())
@@ -33,7 +33,13 @@ fn benchmark_schema_fingerprint(c: &mut Criterion) {
 }
 
 fn benchmark_encodings(c: &mut Criterion) {
-    let payload = black_box((0..1_000u8).cycle().take(10_000).collect::<Vec<u8>>());
+    let payload = black_box(
+        (0..1_000u16)
+            .cycle()
+            .take(10_000)
+            .map(|x| x as u8)
+            .collect::<Vec<u8>>(),
+    );
 
     let encodings = vec![
         ("PLAIN", EncodingId::Plain),
@@ -62,7 +68,7 @@ fn benchmark_encodings(c: &mut Criterion) {
 fn benchmark_compression(c: &mut Criterion) {
     let small_payload = black_box(b"hello world this is a test".to_vec());
     let medium_payload = black_box((0..100u8).cycle().take(5_000).collect::<Vec<u8>>());
-    let large_payload = black_box((0..256u8).cycle().take(100_000).collect::<Vec<u8>>());
+    let large_payload = black_box((0..=255u8).cycle().take(100_000).collect::<Vec<u8>>());
 
     c.bench_function("compress_zstd_small", |b| {
         b.iter(|| compress(&small_payload, CompressionKind::Zstd))
@@ -89,10 +95,10 @@ fn benchmark_compression(c: &mut Criterion) {
     });
 
     // Decompression benchmarks
-    let zstd_compressed = compress(&medium_payload, CompressionKind::Zstd)
-        .expect("compression should work");
-    let lz4_compressed = compress(&medium_payload, CompressionKind::Lz4)
-        .expect("compression should work");
+    let zstd_compressed =
+        compress(&medium_payload, CompressionKind::Zstd).expect("compression should work");
+    let lz4_compressed =
+        compress(&medium_payload, CompressionKind::Lz4).expect("compression should work");
 
     c.bench_function("decompress_zstd_medium", |b| {
         b.iter(|| decompress(black_box(&zstd_compressed), CompressionKind::Zstd))

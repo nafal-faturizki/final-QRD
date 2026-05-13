@@ -1,6 +1,6 @@
 use crate::error::{QrdError, Result};
-use aes_gcm::{Aes256Gcm, Key};
 use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Key};
 use hkdf::Hkdf;
 use rand::RngCore;
 use sha2::Sha256;
@@ -49,10 +49,10 @@ pub fn derive_column_key(master_key: &[u8], config: &EncryptionConfig) -> Result
     }
     let info = format!("qrd:col:{}:{}", config.column_name, schema_hex);
     let mut key = [0u8; 32];
-    
+
     hkdf.expand(info.as_bytes(), &mut key)
         .map_err(|e| QrdError::InvalidSchema(format!("HKDF expansion failed: {}", e)))?;
-    
+
     Ok(key)
 }
 
@@ -137,19 +137,16 @@ pub fn decrypt_payload(
     nonce: &Nonce,
     auth_tag: &AuthTag,
 ) -> Result<Vec<u8>> {
-    if payload.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Reconstruct ciphertext with tag appended
+    // Reconstruct ciphertext with tag appended. AES-GCM authentication must be
+    // verified even for empty plaintext payloads, so we cannot skip decryption.
     let mut full_ciphertext = payload.to_vec();
     full_ciphertext.extend_from_slice(&auth_tag.0);
 
     let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
-    
+
     cipher
         .decrypt(nonce.0.as_slice().into(), &full_ciphertext[..])
-        .map_err(|e| QrdError::InvalidSchema(format!("AES-256-GCM decryption failed: {}", e)))
+        .map_err(|_| QrdError::AuthenticationFailed)
 }
 
 #[cfg(test)]
@@ -181,7 +178,10 @@ mod tests {
 
     #[test]
     fn unpack_rejects_short_input() {
-        assert!(matches!(unpack_encrypted_chunk(&[1, 2, 3]), Err(QrdError::UnexpectedEof)));
+        assert!(matches!(
+            unpack_encrypted_chunk(&[1, 2, 3]),
+            Err(QrdError::UnexpectedEof)
+        ));
     }
 
     #[test]
@@ -232,9 +232,13 @@ mod tests {
         assert_eq!(encrypted.auth_tag.0.len(), 16);
 
         // Decrypt and verify
-        let decrypted =
-            decrypt_payload(&encrypted.ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag)
-                .expect("decryption should work");
+        let decrypted = decrypt_payload(
+            &encrypted.ciphertext,
+            &key,
+            &encrypted.nonce,
+            &encrypted.auth_tag,
+        )
+        .expect("decryption should work");
         assert_eq!(decrypted, plaintext);
     }
 
@@ -250,10 +254,36 @@ mod tests {
         let encrypted = encrypt_payload(b"", &key).expect("encryption should work");
         assert_eq!(encrypted.ciphertext.len(), 0);
 
-        let decrypted =
-            decrypt_payload(&encrypted.ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag)
-                .expect("decryption should work");
+        let decrypted = decrypt_payload(
+            &encrypted.ciphertext,
+            &key,
+            &encrypted.nonce,
+            &encrypted.auth_tag,
+        )
+        .expect("decryption should work");
         assert_eq!(decrypted.len(), 0);
+    }
+
+    #[test]
+    fn empty_payload_authentication_still_verifies() {
+        let master_key = b"super-secret-key";
+        let config = EncryptionConfig {
+            column_name: "sensor_data".to_string(),
+            schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+        };
+        let key = derive_column_key(master_key, &config).expect("key derivation should work");
+
+        let encrypted = encrypt_payload(b"", &key).expect("encryption should work");
+        let invalid_ciphertext = encrypted.ciphertext.clone();
+        // Empty payload remains empty, so modify the auth tag directly.
+        let invalid_tag = AuthTag({
+            let mut tag = encrypted.auth_tag.0;
+            tag[0] ^= 0xFF;
+            tag
+        });
+
+        let result = decrypt_payload(&invalid_ciphertext, &key, &encrypted.nonce, &invalid_tag);
+        assert!(matches!(result, Err(QrdError::AuthenticationFailed)));
     }
 
     #[test]
@@ -274,7 +304,12 @@ mod tests {
             tampered_ciphertext[0] ^= 0xFF;
         }
 
-        let result = decrypt_payload(&tampered_ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag);
+        let result = decrypt_payload(
+            &tampered_ciphertext,
+            &key,
+            &encrypted.nonce,
+            &encrypted.auth_tag,
+        );
         // GCM authentication should catch tampering
         assert!(result.is_err() || result.unwrap() != plaintext);
     }

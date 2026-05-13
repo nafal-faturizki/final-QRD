@@ -13,3 +13,4 @@ path = "src/lib.rs"
 
 [dependencies]
 qrd-core = { path = "../../core/qrd-core" }
+rand = "0.8"

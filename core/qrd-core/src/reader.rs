@@ -111,3 +111,84 @@ impl FileReader {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::file::build_file_image;
+    use crate::row_group::RowGroup;
+    use crate::schema::{FieldKind, SchemaBuilder};
+
+    #[test]
+    fn reader_open_roundtrip_reads_selected_columns() {
+        let schema = SchemaBuilder::new()
+            .add_field("device_id", FieldKind::Utf8, true)
+            .add_field("temperature", FieldKind::Int32, false)
+            .build()
+            .expect("schema should build");
+
+        let row_groups = vec![RowGroup::from_rows_with_names(
+            &[vec![1, 2], vec![3, 4]],
+            &["device_id", "temperature"],
+        )
+        .expect("row group should build")];
+
+        let bytes = build_file_image(&schema, &row_groups).expect("file image should build");
+        let reader = FileReader::open(&bytes).expect("reader should open");
+
+        let columns = reader
+            .read_columns(&["device_id"])
+            .expect("should read requested columns");
+
+        assert_eq!(columns.len(), 1);
+        assert_eq!(columns[0], vec![1, 3]);
+        assert_eq!(reader.row_count(), 2);
+        assert_eq!(reader.footer.row_group_count, 1);
+    }
+
+    #[test]
+    fn reader_inspect_header_footer_and_verify_integrity() {
+        let schema = SchemaBuilder::new()
+            .add_field("id", FieldKind::Int32, true)
+            .build()
+            .expect("schema should build");
+
+        let row_groups = vec![
+            RowGroup::from_rows_with_names(&[vec![10], vec![20]], &["id"])
+                .expect("row group should build"),
+        ];
+        let bytes = build_file_image(&schema, &row_groups).expect("file image should build");
+        let reader = FileReader::open(&bytes).expect("reader should open");
+
+        let header =
+            FileReader::inspect_header(&reader.header.serialize()).expect("header should inspect");
+        assert_eq!(header.schema_id, schema.fingerprint());
+
+        let footer = FileReader::inspect_footer(
+            &crate::footer::build_footer(&schema, 1).expect("footer should build"),
+        )
+        .expect("footer should inspect");
+        assert_eq!(footer.row_group_count, 1);
+
+        reader.verify_integrity().expect("integrity should verify");
+    }
+
+    #[test]
+    fn read_row_group_parses_serialized_row_group() {
+        let schema = SchemaBuilder::new()
+            .add_field("col0", FieldKind::Int32, true)
+            .add_field("col1", FieldKind::Int32, true)
+            .build()
+            .expect("schema should build");
+
+        let reader = FileReader::new(schema);
+        let row_group =
+            RowGroup::from_rows_with_names(&[vec![7, 8], vec![9, 10]], &["col0", "col1"])
+                .expect("row group should build");
+
+        let bytes = row_group.serialize().expect("row group should serialize");
+        let parsed = reader
+            .read_row_group(&bytes)
+            .expect("row group should parse");
+        assert_eq!(parsed, row_group);
+    }
+}

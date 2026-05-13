@@ -85,7 +85,9 @@ fn decode_rle(values: &[u8]) -> Result<Vec<u8>> {
     let mut output = Vec::new();
     let mut cursor = 0usize;
     while cursor < values.len() {
-        let length_bytes = values.get(cursor..cursor + 2).ok_or(QrdError::UnexpectedEof)?;
+        let length_bytes = values
+            .get(cursor..cursor + 2)
+            .ok_or(QrdError::UnexpectedEof)?;
         let run_length = u16::from_le_bytes([length_bytes[0], length_bytes[1]]);
         cursor += 2;
 
@@ -109,7 +111,11 @@ fn encode_bit_packed(values: &[u8]) -> Result<Vec<u8>> {
             .copied()
             .map(|value| {
                 let width = 8 - value.leading_zeros() as u8;
-                if width == 0 { 1 } else { width }
+                if width == 0 {
+                    1
+                } else {
+                    width
+                }
             })
             .max()
             .unwrap_or(1)
@@ -164,7 +170,9 @@ fn decode_bit_packed(values: &[u8]) -> Result<Vec<u8>> {
     }
 
     let payload = values.get(5..).ok_or(QrdError::UnexpectedEof)?;
-    let total_bits = original_len.checked_mul(bit_width).ok_or_else(|| QrdError::InvalidSchema("bit stream split length overflow".into()))?;
+    let total_bits = original_len
+        .checked_mul(bit_width)
+        .ok_or_else(|| QrdError::InvalidSchema("bit stream split length overflow".into()))?;
     let expected_bytes = total_bits.div_ceil(8);
     if payload.len() != expected_bytes {
         return Err(QrdError::UnexpectedEof);
@@ -240,13 +248,15 @@ fn decode_delta_byte_array(values: &[u8]) -> Result<Vec<u8>> {
         length_bytes[3],
     ]) as usize;
 
-    if original_len == 0 {
-        return Ok(Vec::new());
+    let payload = values.get(4..).ok_or(QrdError::UnexpectedEof)?;
+    if payload.len() != original_len {
+        return Err(QrdError::InvalidSchema(
+            "delta byte array payload length mismatch".into(),
+        ));
     }
 
-    let payload = values.get(4..).ok_or(QrdError::UnexpectedEof)?;
-    if payload.is_empty() {
-        return Err(QrdError::UnexpectedEof);
+    if original_len == 0 {
+        return Ok(Vec::new());
     }
 
     let mut output = Vec::with_capacity(original_len);
@@ -255,9 +265,6 @@ fn decode_delta_byte_array(values: &[u8]) -> Result<Vec<u8>> {
         output.push(output[index - 1].wrapping_add(payload[index]));
     }
 
-    if output.len() != original_len {
-        return Err(QrdError::UnexpectedEof);
-    }
     Ok(output)
 }
 
@@ -285,9 +292,9 @@ fn decode_byte_stream_split(values: &[u8]) -> Result<Vec<u8>> {
     ]) as usize;
 
     let payload = values.get(4..).ok_or(QrdError::UnexpectedEof)?;
-    let expected_len = original_len.checked_mul(8).ok_or_else(|| {
-        QrdError::InvalidSchema("bit stream split length overflow".into())
-    })?;
+    let expected_len = original_len
+        .checked_mul(8)
+        .ok_or_else(|| QrdError::InvalidSchema("bit stream split length overflow".into()))?;
     if payload.len() != expected_len {
         return Err(QrdError::UnexpectedEof);
     }
@@ -335,9 +342,13 @@ fn encode_dict_rle(values: &[u8]) -> Result<Vec<u8>> {
 
 fn decode_dict_rle(values: &[u8]) -> Result<Vec<u8>> {
     let dictionary_len = *values.first().ok_or(QrdError::UnexpectedEof)? as usize;
-    let dictionary = values.get(1..1 + dictionary_len).ok_or(QrdError::UnexpectedEof)?;
+    let dictionary = values
+        .get(1..1 + dictionary_len)
+        .ok_or(QrdError::UnexpectedEof)?;
     let length_offset = 1 + dictionary_len;
-    let length_bytes = values.get(length_offset..length_offset + 4).ok_or(QrdError::UnexpectedEof)?;
+    let length_bytes = values
+        .get(length_offset..length_offset + 4)
+        .ok_or(QrdError::UnexpectedEof)?;
     let original_len = u32::from_le_bytes([
         length_bytes[0],
         length_bytes[1],
@@ -345,14 +356,18 @@ fn decode_dict_rle(values: &[u8]) -> Result<Vec<u8>> {
         length_bytes[3],
     ]) as usize;
 
-    let indices = values.get(length_offset + 4..).ok_or(QrdError::UnexpectedEof)?;
+    let indices = values
+        .get(length_offset + 4..)
+        .ok_or(QrdError::UnexpectedEof)?;
     if indices.len() != original_len {
         return Err(QrdError::UnexpectedEof);
     }
 
     let mut output = Vec::with_capacity(original_len);
     for index in indices {
-        let value = *dictionary.get(*index as usize).ok_or(QrdError::UnexpectedEof)?;
+        let value = *dictionary
+            .get(*index as usize)
+            .ok_or(QrdError::UnexpectedEof)?;
         output.push(value);
     }
     Ok(output)
@@ -384,5 +399,17 @@ mod tests {
     fn unknown_encoding_id_is_rejected() {
         let error = EncodingId::from_u8(0xFF).expect_err("invalid encoding id must fail");
         assert!(matches!(error, QrdError::UnsupportedEncoding(0xFF)));
+    }
+
+    #[test]
+    fn delta_byte_array_rejects_invalid_length() {
+        let encoded = encode_delta_byte_array(&[1, 2, 3]).expect("encoding should work");
+        let mut corrupted = encoded.clone();
+        corrupted.push(0xFF);
+
+        assert!(matches!(
+            decode_delta_byte_array(&corrupted),
+            Err(QrdError::InvalidSchema(_))
+        ));
     }
 }

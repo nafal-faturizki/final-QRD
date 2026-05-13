@@ -21,10 +21,12 @@ pub fn estimate_reader_peak_memory(
     active_parallel_row_groups: usize,
     footer_size_bytes: usize,
 ) -> Result<usize> {
-    let column_sum = selected_column_chunk_sizes.iter().try_fold(0usize, |acc, size| {
-        acc.checked_add(*size)
-            .ok_or_else(|| QrdError::InvalidSchema("reader memory overflow".into()))
-    })?;
+    let column_sum = selected_column_chunk_sizes
+        .iter()
+        .try_fold(0usize, |acc, size| {
+            acc.checked_add(*size)
+                .ok_or_else(|| QrdError::InvalidSchema("reader memory overflow".into()))
+        })?;
 
     let base = column_sum
         .checked_mul(active_parallel_row_groups)
@@ -45,8 +47,8 @@ mod tests {
 
     #[test]
     fn reader_memory_estimate_is_bounded() {
-        let peak = estimate_reader_peak_memory(&[100, 200, 300], 2, 4096)
-            .expect("estimate should work");
+        let peak =
+            estimate_reader_peak_memory(&[100, 200, 300], 2, 4096).expect("estimate should work");
         assert_eq!(peak, (100 + 200 + 300) * 2 + 4096);
     }
 

@@ -8,7 +8,9 @@ pub fn transpose_rows(rows: &[Vec<u8>]) -> Result<Vec<Vec<u8>>> {
 
     let width = rows[0].len();
     if rows.iter().any(|row| row.len() != width) {
-        return Err(QrdError::InvalidSchema("rows must have uniform width".into()));
+        return Err(QrdError::InvalidSchema(
+            "rows must have uniform width".into(),
+        ));
     }
 
     let mut columns = vec![Vec::with_capacity(rows.len()); width];

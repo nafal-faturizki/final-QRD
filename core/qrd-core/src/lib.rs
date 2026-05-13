@@ -8,13 +8,13 @@ pub mod ecc;
 pub mod encoding;
 pub mod encryption;
 pub mod error;
-pub mod integrity;
 pub mod file;
+pub mod footer;
+pub mod integrity;
+pub mod memory;
 pub mod parser;
 pub mod reader;
 pub mod row_group;
-pub mod memory;
-pub mod footer;
 pub mod schema;
 pub mod writer;
 

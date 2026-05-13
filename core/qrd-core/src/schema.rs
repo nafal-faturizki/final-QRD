@@ -1,4 +1,5 @@
 use crate::error::{QrdError, Result};
+use sha2::{Digest, Sha256};
 use std::convert::TryFrom;
 
 /// Primitive field kinds supported by the scaffold.
@@ -115,23 +116,25 @@ impl Schema {
     }
 
     /// Computes a stable 8-byte fingerprint for the schema.
+    ///
+    /// This uses SHA-256 over the canonical schema representation and truncates
+    /// the first 8 bytes of the digest, matching the Phase 1 binary contract.
     pub fn fingerprint(&self) -> [u8; 8] {
-        fn mix(mut state: u64, byte: u8) -> u64 {
-            state ^= u64::from(byte);
-            state = state.wrapping_mul(0x100_0000_01B3);
-            state
+        let mut hasher = Sha256::new();
+        let field_count = self.fields.len() as u8;
+        hasher.update([field_count]);
+
+        for field in &self.fields {
+            hasher.update([field.name.len() as u8]);
+            hasher.update(field.name.as_bytes());
+            hasher.update([field.kind as u8]);
+            hasher.update([field.required as u8]);
         }
 
-        let mut state = 0xCBF2_9CE4_8422_2325u64;
-        for field in &self.fields {
-            for byte in field.name.as_bytes() {
-                state = mix(state, *byte);
-            }
-            state = mix(state, 0xFF);
-            state = mix(state, field.required as u8);
-            state = mix(state, field.kind as u8);
-        }
-        state.to_le_bytes()
+        let digest = hasher.finalize();
+        let mut fingerprint = [0u8; 8];
+        fingerprint.copy_from_slice(&digest[..8]);
+        fingerprint
     }
 }
 
@@ -174,7 +177,9 @@ impl SchemaBuilder {
             }
         }
 
-        Ok(Schema { fields: self.fields })
+        Ok(Schema {
+            fields: self.fields,
+        })
     }
 }
 
@@ -194,13 +199,32 @@ mod tests {
         let second = schema.serialize().expect("schema should serialize");
 
         assert_eq!(first, second);
-        assert_eq!(Schema::deserialize(&first).expect("schema should parse"), schema);
+        assert_eq!(
+            Schema::deserialize(&first).expect("schema should parse"),
+            schema
+        );
     }
 
     #[test]
     fn schema_rejects_truncated_input() {
-        let error = Schema::deserialize(&[1, 4, b'n', b'a'])
-            .expect_err("truncated schema must fail");
+        let error =
+            Schema::deserialize(&[1, 4, b'n', b'a']).expect_err("truncated schema must fail");
         assert!(matches!(error, QrdError::UnexpectedEof));
+    }
+
+    #[test]
+    fn fingerprint_changes_when_schema_changes() {
+        let a = SchemaBuilder::new()
+            .add_field("device_id", FieldKind::Utf8, true)
+            .build()
+            .expect("schema should build");
+        let b = SchemaBuilder::new()
+            .add_field("device_id", FieldKind::Utf8, true)
+            .add_field("temperature", FieldKind::Float32, false)
+            .build()
+            .expect("schema should build");
+
+        assert_ne!(a.fingerprint(), b.fingerprint());
+        assert_eq!(a.fingerprint(), a.fingerprint());
     }
 }

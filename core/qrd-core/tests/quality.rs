@@ -1,13 +1,18 @@
 use qrd_core::columnar::transpose_rows;
 use qrd_core::compression::{choose_compression, compress, decompress, CompressionKind};
-use qrd_core::ecc::{encode as ecc_encode, recover_missing_chunk, verify as ecc_verify, ReedSolomonConfig};
+use qrd_core::ecc::{
+    encode as ecc_encode, recover_missing_chunk, verify as ecc_verify, ReedSolomonConfig,
+};
 use qrd_core::encoding::{decode, encode, EncodingId};
-use qrd_core::encryption::{decrypt_payload, derive_column_key, encrypt_payload, pack_encrypted_chunk, unpack_encrypted_chunk, EncryptionConfig};
+use qrd_core::encryption::{
+    decrypt_payload, derive_column_key, encrypt_payload, pack_encrypted_chunk,
+    unpack_encrypted_chunk, EncryptionConfig,
+};
 use qrd_core::error::QrdError;
+use qrd_core::integrity::crc32;
 use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileHeader};
 use qrd_core::row_group::{ColumnChunk, RowGroup};
 use qrd_core::schema::{FieldKind, SchemaBuilder};
-use qrd_core::integrity::crc32;
 
 fn corrupt_bytes(bytes: &[u8], index: usize) -> Vec<u8> {
     let mut result = bytes.to_vec();
@@ -39,7 +44,10 @@ fn encoding_rle_preserves_repeated_patterns() {
 fn encoding_rle_detects_truncated_payload() {
     let encoded = encode(&[1, 1, 1, 2], EncodingId::Rle).unwrap();
     let truncated = &encoded[..encoded.len() - 1];
-    assert!(matches!(decode(truncated, EncodingId::Rle), Err(QrdError::UnexpectedEof)));
+    assert!(matches!(
+        decode(truncated, EncodingId::Rle),
+        Err(QrdError::UnexpectedEof)
+    ));
 }
 
 #[test]
@@ -92,7 +100,10 @@ fn encoding_dict_rle_roundtrips_low_cardinality_input() {
 
 #[test]
 fn encoding_unknown_id_is_rejected() {
-    assert!(matches!(EncodingId::from_u8(0xFF), Err(QrdError::UnsupportedEncoding(0xFF))));
+    assert!(matches!(
+        EncodingId::from_u8(0xFF),
+        Err(QrdError::UnsupportedEncoding(0xFF))
+    ));
 }
 
 #[test]
@@ -138,7 +149,10 @@ fn compression_invalid_zstd_payload_returns_error() {
 #[test]
 fn encryption_key_derivation_is_deterministic_for_same_config() {
     let master_key = b"master-key-1234";
-    let config = EncryptionConfig { column_name: "sensor".to_string(), schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8] };
+    let config = EncryptionConfig {
+        column_name: "sensor".to_string(),
+        schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+    };
     let key1 = derive_column_key(master_key, &config).unwrap();
     let key2 = derive_column_key(master_key, &config).unwrap();
     assert_eq!(key1, key2);
@@ -147,8 +161,14 @@ fn encryption_key_derivation_is_deterministic_for_same_config() {
 #[test]
 fn encryption_key_derivation_changes_for_different_schema_fingerprint() {
     let master_key = b"master-key-1234";
-    let config1 = EncryptionConfig { column_name: "sensor".to_string(), schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8] };
-    let config2 = EncryptionConfig { column_name: "sensor".to_string(), schema_fingerprint: [8, 7, 6, 5, 4, 3, 2, 1] };
+    let config1 = EncryptionConfig {
+        column_name: "sensor".to_string(),
+        schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+    };
+    let config2 = EncryptionConfig {
+        column_name: "sensor".to_string(),
+        schema_fingerprint: [8, 7, 6, 5, 4, 3, 2, 1],
+    };
     let key1 = derive_column_key(master_key, &config1).unwrap();
     let key2 = derive_column_key(master_key, &config2).unwrap();
     assert_ne!(key1, key2);
@@ -157,8 +177,14 @@ fn encryption_key_derivation_changes_for_different_schema_fingerprint() {
 #[test]
 fn encryption_key_derivation_changes_for_different_column_name() {
     let master_key = b"master-key-1234";
-    let config1 = EncryptionConfig { column_name: "sensorA".to_string(), schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8] };
-    let config2 = EncryptionConfig { column_name: "sensorB".to_string(), schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8] };
+    let config1 = EncryptionConfig {
+        column_name: "sensorA".to_string(),
+        schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+    };
+    let config2 = EncryptionConfig {
+        column_name: "sensorB".to_string(),
+        schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+    };
     let key1 = derive_column_key(master_key, &config1).unwrap();
     let key2 = derive_column_key(master_key, &config2).unwrap();
     assert_ne!(key1, key2);
@@ -167,29 +193,50 @@ fn encryption_key_derivation_changes_for_different_column_name() {
 #[test]
 fn encryption_encrypt_decrypt_roundtrip_for_small_payloads() {
     let master_key = b"master-key-1234";
-    let config = EncryptionConfig { column_name: "sensor".to_string(), schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8] };
+    let config = EncryptionConfig {
+        column_name: "sensor".to_string(),
+        schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+    };
     let key = derive_column_key(master_key, &config).unwrap();
     let payload = b"hello";
     let encrypted = encrypt_payload(payload, &key).unwrap();
-    let decrypted = decrypt_payload(&encrypted.ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag).unwrap();
+    let decrypted = decrypt_payload(
+        &encrypted.ciphertext,
+        &key,
+        &encrypted.nonce,
+        &encrypted.auth_tag,
+    )
+    .unwrap();
     assert_eq!(decrypted, payload);
 }
 
 #[test]
 fn encryption_tamper_detects_ciphertext_modification() {
     let master_key = b"master-key-1234";
-    let config = EncryptionConfig { column_name: "sensor".to_string(), schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8] };
+    let config = EncryptionConfig {
+        column_name: "sensor".to_string(),
+        schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+    };
     let key = derive_column_key(master_key, &config).unwrap();
     let payload = b"integrity check";
     let encrypted = encrypt_payload(payload, &key).unwrap();
     let tampered_ciphertext = corrupt_bytes(&encrypted.ciphertext, 0);
-    assert!(decrypt_payload(&tampered_ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag).is_err());
+    assert!(decrypt_payload(
+        &tampered_ciphertext,
+        &key,
+        &encrypted.nonce,
+        &encrypted.auth_tag
+    )
+    .is_err());
 }
 
 #[test]
 fn encryption_tamper_detects_auth_tag_modification() {
     let master_key = b"master-key-1234";
-    let config = EncryptionConfig { column_name: "sensor".to_string(), schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8] };
+    let config = EncryptionConfig {
+        column_name: "sensor".to_string(),
+        schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+    };
     let key = derive_column_key(master_key, &config).unwrap();
     let payload = b"integrity check";
     let encrypted = encrypt_payload(payload, &key).unwrap();
@@ -200,7 +247,18 @@ fn encryption_tamper_detects_auth_tag_modification() {
 
 #[test]
 fn encrypted_chunk_pack_unpack_roundtrips() {
-    let chunk = encrypt_payload(b"roundtrip test", &derive_column_key(b"master", &EncryptionConfig { column_name: "sensor".to_string(), schema_fingerprint: [1,2,3,4,5,6,7,8] }).unwrap()).unwrap();
+    let chunk = encrypt_payload(
+        b"roundtrip test",
+        &derive_column_key(
+            b"master",
+            &EncryptionConfig {
+                column_name: "sensor".to_string(),
+                schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
     let packed = pack_encrypted_chunk(&chunk);
     let unpacked = unpack_encrypted_chunk(&packed).unwrap();
     assert_eq!(unpacked, chunk);
@@ -330,8 +388,16 @@ fn parser_rejects_truncated_footer() {
 
 #[test]
 fn schema_fingerprint_changes_when_field_order_changes() {
-    let schema1 = SchemaBuilder::new().add_field("a", FieldKind::Int32, false).add_field("b", FieldKind::Utf8, true).build().unwrap();
-    let schema2 = SchemaBuilder::new().add_field("b", FieldKind::Utf8, true).add_field("a", FieldKind::Int32, false).build().unwrap();
+    let schema1 = SchemaBuilder::new()
+        .add_field("a", FieldKind::Int32, false)
+        .add_field("b", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
+    let schema2 = SchemaBuilder::new()
+        .add_field("b", FieldKind::Utf8, true)
+        .add_field("a", FieldKind::Int32, false)
+        .build()
+        .unwrap();
     assert_ne!(schema1.fingerprint(), schema2.fingerprint());
 }
 
@@ -339,7 +405,10 @@ fn schema_fingerprint_changes_when_field_order_changes() {
 fn transpose_rows_roundtrips_wide_rows() {
     let rows = vec![vec![1, 2, 3, 4, 5], vec![6, 7, 8, 9, 10]];
     let columns = transpose_rows(&rows).unwrap();
-    assert_eq!(columns, vec![vec![1, 6], vec![2, 7], vec![3, 8], vec![4, 9], vec![5, 10]]);
+    assert_eq!(
+        columns,
+        vec![vec![1, 6], vec![2, 7], vec![3, 8], vec![4, 9], vec![5, 10]]
+    );
 }
 
 #[test]
@@ -369,7 +438,10 @@ fn row_group_column_chunk_payloads_decode_correctly() {
 
 #[test]
 fn parser_footer_roundtrips_known_footer() {
-    let schema = SchemaBuilder::new().add_field("id", FieldKind::Int32, false).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("id", FieldKind::Int32, false)
+        .build()
+        .unwrap();
     let footer = qrd_core::footer::build_footer(&schema, 1).unwrap();
     let parsed = parse_footer(&footer).unwrap();
     assert_eq!(parsed.row_group_count, 1);
@@ -399,7 +471,10 @@ fn column_chunk_encoding_id_stored_and_restored() {
 
 #[test]
 fn schema_builder_rejects_duplicate_field_names() {
-    let result = SchemaBuilder::new().add_field("id", FieldKind::Int32, false).add_field("id", FieldKind::Utf8, true).build();
+    let result = SchemaBuilder::new()
+        .add_field("id", FieldKind::Int32, false)
+        .add_field("id", FieldKind::Utf8, true)
+        .build();
     assert!(result.is_err());
 }
 
@@ -432,13 +507,19 @@ fn encoding_dict_rle_rejects_invalid_dictionary_reference() {
 
 #[test]
 fn encryption_rejects_empty_master_key_derivation() {
-    let config = EncryptionConfig { column_name: "sensor".to_string(), schema_fingerprint: [0; 8] };
+    let config = EncryptionConfig {
+        column_name: "sensor".to_string(),
+        schema_fingerprint: [0; 8],
+    };
     assert!(derive_column_key(b"", &config).is_err());
 }
 
 #[test]
 fn row_group_roundtrips_with_custom_column_names() {
-    let row_group = RowGroup { row_count: 1, columns: vec![ColumnChunk::new("foo", b"x", EncodingId::Plain).unwrap()] };
+    let row_group = RowGroup {
+        row_count: 1,
+        columns: vec![ColumnChunk::new("foo", b"x", EncodingId::Plain).unwrap()],
+    };
     let bytes = row_group.serialize().unwrap();
     let parsed = RowGroup::deserialize(&bytes).unwrap();
     assert_eq!(parsed.columns[0].name, "foo");

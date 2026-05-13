@@ -9,7 +9,9 @@ fn xor_chunks(chunks: &[Vec<u8>]) -> Result<Vec<u8>> {
 
     let width = chunks[0].len();
     if chunks.iter().any(|chunk| chunk.len() != width) {
-        return Err(QrdError::InvalidSchema("ecc chunks must have uniform width".into()));
+        return Err(QrdError::InvalidSchema(
+            "ecc chunks must have uniform width".into(),
+        ));
     }
 
     let mut parity = vec![0u8; width];
@@ -245,11 +247,7 @@ mod tests {
         let parity = encode(&data, config).expect("ecc should encode");
 
         // Simulate missing first data chunk
-        let corrupted = vec![
-            None,
-            Some(data[1].clone()),
-            Some(parity[0].clone()),
-        ];
+        let corrupted = vec![None, Some(data[1].clone()), Some(parity[0].clone())];
 
         let recovered = recover_missing_chunk(&corrupted, config).expect("recovery should work");
         assert_eq!(recovered, data[0]);
@@ -262,11 +260,7 @@ mod tests {
         let parity = encode(&data, config).expect("ecc should encode");
 
         // Simulate two missing chunks
-        let corrupted = vec![
-            None,
-            None,
-            Some(parity[0].clone()),
-        ];
+        let corrupted = vec![None, None, Some(parity[0].clone())];
 
         let result = recover_missing_chunk(&corrupted, config);
         assert!(result.is_err());

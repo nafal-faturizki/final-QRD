@@ -1,5 +1,5 @@
 use qrd_core::compression::{compress, decompress, CompressionKind};
-use qrd_core::encryption::{derive_column_key, encrypt_payload, decrypt_payload, EncryptionConfig};
+use qrd_core::encryption::{decrypt_payload, derive_column_key, encrypt_payload, EncryptionConfig};
 use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileFooter, FileHeader};
 
 // ============================================================================
@@ -37,7 +37,13 @@ pub fn serialize_header(
     schema_id: &[u8; 8],
     flags: u16,
 ) -> Vec<u8> {
-    let header = FileHeader::new(format_major, format_minor, *schema_id, flags, *b"qrd-0.1.0\0\0\0");
+    let header = FileHeader::new(
+        format_major,
+        format_minor,
+        *schema_id,
+        flags,
+        *b"qrd-0.1.0\0\0\0",
+    );
     header.serialize().to_vec()
 }
 
@@ -47,8 +53,7 @@ pub fn serialize_header(
 
 /// Compresses a payload using Zstandard.
 pub fn compress_zstd(payload: &[u8]) -> Result<Vec<u8>, String> {
-    compress(payload, CompressionKind::Zstd)
-        .map_err(|e| format!("ZSTD compression failed: {}", e))
+    compress(payload, CompressionKind::Zstd).map_err(|e| format!("ZSTD compression failed: {}", e))
 }
 
 /// Decompresses a Zstandard-compressed payload.
@@ -59,8 +64,7 @@ pub fn decompress_zstd(payload: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Compresses a payload using LZ4.
 pub fn compress_lz4(payload: &[u8]) -> Result<Vec<u8>, String> {
-    compress(payload, CompressionKind::Lz4)
-        .map_err(|e| format!("LZ4 compression failed: {}", e))
+    compress(payload, CompressionKind::Lz4).map_err(|e| format!("LZ4 compression failed: {}", e))
 }
 
 /// Decompresses an LZ4-compressed payload.
@@ -108,8 +112,8 @@ pub fn decrypt(
     nonce: &[u8; 12],
     auth_tag: &[u8; 16],
 ) -> Result<Vec<u8>, String> {
-    use qrd_core::encryption::Nonce as QrdNonce;
     use qrd_core::encryption::AuthTag as QrdAuthTag;
+    use qrd_core::encryption::Nonce as QrdNonce;
 
     let nonce_wrapper = QrdNonce(*nonce);
     let auth_tag_wrapper = QrdAuthTag(*auth_tag);
@@ -165,8 +169,7 @@ mod tests {
 
     #[test]
     fn wasm_serialize_header() {
-        let serialized =
-            serialize_header(1, 0, &[1, 2, 3, 4, 5, 6, 7, 8], 0);
+        let serialized = serialize_header(1, 0, &[1, 2, 3, 4, 5, 6, 7, 8], 0);
         assert_eq!(serialized.len(), qrd_core::parser::HEADER_SIZE);
         assert_eq!(serialized[0], 0x51); // 'Q'
         assert_eq!(serialized[1], 0x52); // 'R'
@@ -200,9 +203,13 @@ mod tests {
         let mut auth_tag_array = [0u8; 16];
         auth_tag_array.copy_from_slice(&encrypted.auth_tag);
 
-        let decrypted =
-            decrypt(&encrypted.ciphertext, &key_array, &nonce_array, &auth_tag_array)
-                .expect("decryption should work");
+        let decrypted = decrypt(
+            &encrypted.ciphertext,
+            &key_array,
+            &nonce_array,
+            &auth_tag_array,
+        )
+        .expect("decryption should work");
         assert_eq!(decrypted, plaintext);
     }
 }

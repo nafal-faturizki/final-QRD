@@ -145,7 +145,9 @@ pub fn parse_footer(bytes: &[u8]) -> Result<FileFooter> {
         return Err(QrdError::InvalidFooterLength);
     }
 
-    let schema_len_bytes = bytes.get(cursor..cursor + 4).ok_or(QrdError::UnexpectedEof)?;
+    let schema_len_bytes = bytes
+        .get(cursor..cursor + 4)
+        .ok_or(QrdError::UnexpectedEof)?;
     let schema_len = u32::from_le_bytes([
         schema_len_bytes[0],
         schema_len_bytes[1],
@@ -157,11 +159,15 @@ pub fn parse_footer(bytes: &[u8]) -> Result<FileFooter> {
     let schema_end = cursor
         .checked_add(schema_len)
         .ok_or_else(|| QrdError::InvalidSchema("footer length overflow".into()))?;
-    let schema_bytes = bytes.get(cursor..schema_end).ok_or(QrdError::UnexpectedEof)?;
+    let schema_bytes = bytes
+        .get(cursor..schema_end)
+        .ok_or(QrdError::UnexpectedEof)?;
     let schema = Schema::deserialize(schema_bytes)?;
     cursor = schema_end;
 
-    let row_group_count_bytes = bytes.get(cursor..cursor + 4).ok_or(QrdError::UnexpectedEof)?;
+    let row_group_count_bytes = bytes
+        .get(cursor..cursor + 4)
+        .ok_or(QrdError::UnexpectedEof)?;
     let row_group_count = u32::from_le_bytes([
         row_group_count_bytes[0],
         row_group_count_bytes[1],
@@ -183,17 +189,11 @@ pub fn parse_footer(bytes: &[u8]) -> Result<FileFooter> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{SchemaBuilder, FieldKind};
+    use crate::schema::{FieldKind, SchemaBuilder};
 
     #[test]
     fn header_roundtrip_preserves_bytes() {
-        let header = FileHeader::new(
-            1,
-            0,
-            [1, 2, 3, 4, 5, 6, 7, 8],
-            0b1010,
-            *b"qrd-0.1.0\0\0\0",
-        );
+        let header = FileHeader::new(1, 0, [1, 2, 3, 4, 5, 6, 7, 8], 0b1010, *b"qrd-0.1.0\0\0\0");
 
         let serialized = header.serialize();
         let parsed = parse_header(&serialized).expect("valid header");

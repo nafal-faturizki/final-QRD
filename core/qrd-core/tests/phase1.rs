@@ -1,6 +1,8 @@
-use qrd_core::memory::{estimate_reader_peak_memory, estimate_writer_peak_memory};
 use qrd_core::file::{build_file_image, parse_file_image};
-use qrd_core::parser::{append_footer_length, build_footer, parse_footer, parse_footer_length, parse_header, FileHeader};
+use qrd_core::memory::{estimate_reader_peak_memory, estimate_writer_peak_memory};
+use qrd_core::parser::{
+    append_footer_length, build_footer, parse_footer, parse_footer_length, parse_header, FileHeader,
+};
 use qrd_core::row_group::RowGroup;
 use qrd_core::schema::{FieldKind, SchemaBuilder};
 
@@ -50,7 +52,8 @@ fn footer_length_trailer_is_read_from_tail() {
 #[test]
 fn bounded_memory_helpers_return_expected_values() {
     let writer_peak = estimate_writer_peak_memory(100, 32, 16, 8).expect("estimate should work");
-    let reader_peak = estimate_reader_peak_memory(&[10, 20, 30], 3, 64).expect("estimate should work");
+    let reader_peak =
+        estimate_reader_peak_memory(&[10, 20, 30], 3, 64).expect("estimate should work");
 
     assert_eq!(writer_peak, 100 * 32 + 16 + 8);
     assert_eq!(reader_peak, (10 + 20 + 30) * 3 + 64);

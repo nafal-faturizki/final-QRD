@@ -54,7 +54,9 @@ impl RowGroup {
                 .map_err(|_| QrdError::InvalidSchema("row group is too large".into()))?;
             let width = rows[0].len();
             if rows.iter().any(|row| row.len() != width) {
-                return Err(QrdError::InvalidSchema("rows must have uniform width".into()));
+                return Err(QrdError::InvalidSchema(
+                    "rows must have uniform width".into(),
+                ));
             }
             if column_names.len() != width {
                 return Err(QrdError::InvalidSchema(
@@ -114,7 +116,9 @@ impl RowGroup {
     /// Parses a row group from the canonical binary representation.
     pub fn deserialize(bytes: &[u8]) -> Result<Self> {
         let mut cursor = 0usize;
-        let row_count_bytes = bytes.get(cursor..cursor + 4).ok_or(QrdError::UnexpectedEof)?;
+        let row_count_bytes = bytes
+            .get(cursor..cursor + 4)
+            .ok_or(QrdError::UnexpectedEof)?;
         let row_count = u32::from_le_bytes([
             row_count_bytes[0],
             row_count_bytes[1],
@@ -123,7 +127,9 @@ impl RowGroup {
         ]);
         cursor += 4;
 
-        let column_count_bytes = bytes.get(cursor..cursor + 4).ok_or(QrdError::UnexpectedEof)?;
+        let column_count_bytes = bytes
+            .get(cursor..cursor + 4)
+            .ok_or(QrdError::UnexpectedEof)?;
         let column_count = u32::from_le_bytes([
             column_count_bytes[0],
             column_count_bytes[1],
@@ -149,7 +155,9 @@ impl RowGroup {
             let encoding = EncodingId::from_u8(*bytes.get(cursor).ok_or(QrdError::UnexpectedEof)?)?;
             cursor += 1;
 
-            let data_len_bytes = bytes.get(cursor..cursor + 4).ok_or(QrdError::UnexpectedEof)?;
+            let data_len_bytes = bytes
+                .get(cursor..cursor + 4)
+                .ok_or(QrdError::UnexpectedEof)?;
             let data_len = u32::from_le_bytes([
                 data_len_bytes[0],
                 data_len_bytes[1],
@@ -161,10 +169,15 @@ impl RowGroup {
             let data_end = cursor
                 .checked_add(data_len)
                 .ok_or_else(|| QrdError::InvalidSchema("column data overflow".into()))?;
-            let data = bytes.get(cursor..data_end).ok_or(QrdError::UnexpectedEof)?.to_vec();
+            let data = bytes
+                .get(cursor..data_end)
+                .ok_or(QrdError::UnexpectedEof)?
+                .to_vec();
             cursor = data_end;
 
-            let checksum_bytes = bytes.get(cursor..cursor + 4).ok_or(QrdError::UnexpectedEof)?;
+            let checksum_bytes = bytes
+                .get(cursor..cursor + 4)
+                .ok_or(QrdError::UnexpectedEof)?;
             let expected_checksum = u32::from_le_bytes([
                 checksum_bytes[0],
                 checksum_bytes[1],
@@ -177,11 +190,17 @@ impl RowGroup {
                 return Err(QrdError::InvalidSchema("column checksum mismatch".into()));
             }
 
-            columns.push(ColumnChunk { name, encoding, data });
+            columns.push(ColumnChunk {
+                name,
+                encoding,
+                data,
+            });
         }
 
         if cursor != bytes.len() {
-            return Err(QrdError::InvalidSchema("trailing row group bytes detected".into()));
+            return Err(QrdError::InvalidSchema(
+                "trailing row group bytes detected".into(),
+            ));
         }
 
         Ok(Self { row_count, columns })

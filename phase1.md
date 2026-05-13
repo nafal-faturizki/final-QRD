@@ -218,6 +218,28 @@ Semua SDK menggunakan satu Rust core engine — tidak ada reimplementasi format 
 
 ---
 
+## Alur Uji Phase 1
+
+Untuk Phase 1, pastikan semua test inti dapat dijalankan dari root workspace.
+
+- Jalankan seluruh suite Rust:
+
+```bash
+cargo test -q --workspace
+```
+
+- Periksa bahwa `core/qrd-core` lulus semua unit, integration, property, dan golden tests.
+
+- Pastikan `wasm-pack` tersedia untuk target WASM:
+
+```bash
+wasm-pack --version
+```
+
+- Perbarui dokumentasi jika ada kontrak file format atau API publik yang berubah.
+
+---
+
 ## Aturan Wajib (Rules)
 
 1. **Format pipeline order adalah kontrak.** Compress → Encrypt, tidak boleh dibalik.
@@ -237,35 +259,35 @@ Centang setiap item. Phase 1 dinyatakan selesai hanya jika **semua 100% tercekli
 
 ### Core Engine
 
-- [ ] Rust core engine dikompilasi tanpa warning (`cargo clippy -- -D warnings`)
-- [ ] `cargo fmt` bersih (tidak ada perbedaan format)
-- [ ] 7 encoding algorithms diimplementasikan: PLAIN, RLE, BIT_PACKED, DELTA_BINARY, DELTA_BYTE_ARRAY, BYTE_STREAM_SPLIT, DICT_RLE
-- [ ] Adaptive compression selection (ZSTD + LZ4) berfungsi
-- [ ] AES-256-GCM per-column encryption dengan HKDF-SHA256 berfungsi
+- [x] Rust core engine dikompilasi tanpa warning (`cargo clippy -- -D warnings`)
+- [x] `cargo fmt` bersih (tidak ada perbedaan format)
+- [x] 7 encoding algorithms diimplementasikan: PLAIN, RLE, BIT_PACKED, DELTA_BINARY, DELTA_BYTE_ARRAY, BYTE_STREAM_SPLIT, DICT_RLE
+- [x] Adaptive compression selection (ZSTD + LZ4) berfungsi
+- [x] AES-256-GCM per-column encryption dengan HKDF-SHA256 berfungsi
 - [ ] Reed-Solomon ECC encode/decode/recovery berfungsi
-- [ ] CRC32 per-chunk dan per-footer berfungsi
-- [ ] Footer parse protocol (7 langkah) diimplementasikan lengkap
-- [ ] File header 32 bytes sesuai spesifikasi
+- [x] CRC32 per-chunk dan per-footer berfungsi
+- [x] Footer parse protocol (7 langkah) diimplementasikan lengkap
+- [x] File header 32 bytes sesuai spesifikasi
 - [ ] Zero-panic policy terverifikasi pada input adversarial
 - [ ] Semua `unsafe` Rust memiliki `// SAFETY:` comment lengkap
 - [ ] Memory bounds (writer & reader) tidak bergantung pada total file size
 
 ### Enkripsi & Keamanan
 
-- [ ] Nonce 12 bytes dibangkitkan via `OsRng` per chunk
-- [ ] Auth tag AES-GCM memverifikasi integritas DAN autentisitas
+- [x] Nonce 12 bytes dibangkitkan via `OsRng` per chunk
+- [x] Auth tag AES-GCM memverifikasi integritas DAN autentisitas
 - [ ] Statistik terenkripsi saat `FLAGS.STATS_ENCRYPTED = 1`
-- [ ] HKDF derivasi kunci per-kolom dengan info string `"qrd:col:{col_name}:{schema_id}"`
-- [ ] `Error::AuthenticationFailed` tidak mengekspos detail plaintext
-- [ ] Schema fingerprint (SHA-256 truncated) tersimpan di header `SCHEMA_ID`
+- [x] HKDF derivasi kunci per-kolom dengan info string `"qrd:col:{col_name}:{schema_id}"`
+- [x] `Error::AuthenticationFailed` tidak mengekspos detail plaintext
+- [x] Schema fingerprint (SHA-256 truncated) tersimpan di header `SCHEMA_ID`
 
 ### FFI & WASM
 
-- [ ] C FFI layer (`core/qrd-ffi/`) berstatus stable ABI
-- [ ] `include/qrd.h` tersedia sebagai header kanonik
+- [x] C FFI layer (`core/qrd-ffi/`) berstatus stable ABI
+- [x] `include/qrd.h` tersedia sebagai header kanonik
 - [ ] WASM target dikompilasi untuk browser + Node.js
-- [ ] `initWasm()` berfungsi sebelum operasi lain dipanggil
-- [ ] `inspectFooter()` berfungsi tanpa membaca payload
+- [x] `initWasm()` berfungsi sebelum operasi lain dipanggil
+- [x] `inspectFooter()` berfungsi tanpa membaca payload
 
 ### SDK Bahasa
 
@@ -291,7 +313,7 @@ Centang setiap item. Phase 1 dinyatakan selesai hanya jika **semua 100% tercekli
 
 ### Benchmark Suite
 
-- [ ] Criterion benchmark suite berfungsi (`cargo bench --package qrd-core`)
+- [x] Criterion benchmark suite berfungsi (`cargo bench --package qrd-core`)
 - [ ] Benchmark mencakup: encode, streaming, compression, encryption
 - [ ] Hasil benchmark direkam dengan spesifikasi hardware
 
@@ -303,13 +325,13 @@ Centang setiap item. Phase 1 dinyatakan selesai hanya jika **semua 100% tercekli
 
 ### Dokumentasi
 
-- [ ] `docs/FORMAT_SPEC.md` — spesifikasi binary format lengkap dan normatif
-- [ ] `docs/architecture/ARCHITECTURE.md` — desain sistem dan overview komponen
-- [ ] `docs/security/CRYPTOGRAPHY.md` — justifikasi pemilihan primitif kriptografis
-- [ ] `docs/security/FUZZING.md` — coverage fuzz target dan manajemen corpus
-- [ ] `CONTRIBUTING.md` — panduan kontribusi lengkap
-- [ ] `SECURITY.md` — kebijakan responsible disclosure dan PGP key
-- [ ] `CHANGELOG.md` — history versi tersedia
+- [x] `docs/FORMAT_SPEC.md` — spesifikasi binary format lengkap dan normatif
+- [x] `docs/architecture/ARCHITECTURE.md` — desain sistem dan overview komponen
+- [x] `docs/security/CRYPTOGRAPHY.md` — justifikasi pemilihan primitif kriptografis
+- [x] `docs/security/FUZZING.md` — coverage fuzz target dan manajemen corpus
+- [x] `CONTRIBUTING.md` — panduan kontribusi lengkap
+- [x] `SECURITY.md` — kebijakan responsible disclosure dan PGP key
+- [x] `CHANGELOG.md` — history versi tersedia
 
 ### Tools CLI
 

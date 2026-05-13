@@ -1,5 +1,7 @@
 use qrd_core::file::parse_file_image;
 use qrd_core::parser::{parse_footer, parse_footer_length, parse_header};
+use rand::rngs::OsRng;
+use rand::RngCore;
 use std::fs;
 use std::path::Path;
 
@@ -83,11 +85,18 @@ pub fn convert_placeholder(mode: &str, input: &Path, output: &Path) -> Result<St
 }
 
 pub fn keygen_placeholder(mode: &str) -> Result<String, String> {
-    Ok(match mode {
-        "master" => "MASTER_KEY_HEX=placeholder".into(),
-        "signing" => "ED25519_PRIVATE_KEY=placeholder\nED25519_PUBLIC_KEY=placeholder".into(),
-        _ => return Err("unknown keygen mode".into()),
-    })
+    match mode {
+        "master" => {
+            let mut key = [0u8; 32];
+            OsRng.fill_bytes(&mut key);
+            let hex_key: String = key.iter().map(|byte| format!("{:02x}", byte)).collect();
+            Ok(format!("MASTER_KEY_HEX={hex_key}"))
+        }
+        "signing" => Ok(
+            "ED25519_PRIVATE_KEY=placeholder\nED25519_PUBLIC_KEY=placeholder".into(),
+        ),
+        _ => Err("unknown keygen mode".into()),
+    }
 }
 
 #[cfg(test)]
