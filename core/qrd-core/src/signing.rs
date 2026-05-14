@@ -96,6 +96,22 @@ impl VerifyingKeyPair {
             })
     }
 
+    /// Verify an arbitrary message with a raw signature (compatibility helper)
+    pub fn verify_message(&self, msg: &[u8], signature_bytes: &[u8]) -> Result<()> {
+        if signature_bytes.len() != SIGNATURE_SIZE {
+            return Err(QrdError::InvalidSchema(
+                "signature must be 64 bytes".into(),
+            ));
+        }
+        let mut sig_array = [0u8; SIGNATURE_SIZE];
+        sig_array.copy_from_slice(signature_bytes);
+        let signature = Signature::from_bytes(&sig_array);
+
+        self.verifying_key
+            .verify(msg, &signature)
+            .map_err(|e| QrdError::InvalidSchema(format!("signature verification failed: {}", e)))
+    }
+
     /// Gets the bytes of the public key
     pub fn to_bytes(&self) -> [u8; PUBLIC_KEY_SIZE] {
         let mut pubkey = [0u8; PUBLIC_KEY_SIZE];
@@ -157,17 +173,149 @@ impl SchemaSignature {
         })
     }
 
-    /// Verifies the signature against a schema fingerprint
-    pub fn verify(&self, schema_id: &[u8; 8]) -> Result<()> {
+    /// Verifies the signature. Accepts either an 8-byte schema fingerprint or
+    /// a full serialized schema; in the latter case the fingerprint will be
+    /// computed via SHA-256 and the first 8 bytes used for verification.
+    pub fn verify(&self, schema: &[u8]) -> Result<()> {
         if self.algorithm != SIGNATURE_ALGORITHM {
             return Err(QrdError::InvalidSchema(
                 format!("unsupported signature algorithm: {}", self.algorithm).into(),
             ));
         }
 
+        let mut fingerprint = [0u8; 8];
+        if schema.len() == 8 {
+            // Ambiguity: an 8-byte slice could be either a schema fingerprint
+            // or a tiny serialized schema (some schemas serialize to 8 bytes).
+            // Try to parse it as a serialized schema; if parsing succeeds,
+            // compute the fingerprint from the schema bytes. Otherwise treat
+            // the input as a raw 8-byte fingerprint.
+            match crate::schema::Schema::deserialize(schema) {
+                Ok(parsed) => {
+                    fingerprint = parsed.fingerprint();
+                }
+                Err(_) => fingerprint.copy_from_slice(schema),
+            }
+        } else {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(schema);
+            let digest = hasher.finalize();
+            fingerprint.copy_from_slice(&digest[..8]);
+        }
+
+    
+
         let verifying_key = VerifyingKeyPair::from_bytes(&self.public_key)?;
-        verifying_key.verify_signature(schema_id, &self.signature)
+        verifying_key.verify_signature(&fingerprint, &self.signature)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Compatibility shims for older test API names
+// ---------------------------------------------------------------------------
+
+/// Backwards-compatible alias used by older tests.
+pub struct SigningKeypair {
+    inner: SigningKeyPair,
+}
+
+impl SigningKeypair {
+    /// Generate a new keypair (returns Result to match historical API)
+    pub fn generate() -> Result<Self> {
+        Ok(Self {
+            inner: SigningKeyPair::generate(),
+        })
+    }
+
+    /// Create from a seed slice
+    pub fn from_seed(seed: &[u8]) -> Result<Self> {
+        if seed.len() != PRIVATE_KEY_SIZE {
+            return Err(QrdError::InvalidSchema("seed must be 32 bytes".into()));
+        }
+        let mut arr = [0u8; PRIVATE_KEY_SIZE];
+        arr.copy_from_slice(seed);
+        Ok(Self {
+            inner: SigningKeyPair::from_seed(arr)?,
+        })
+    }
+
+    /// Return public key bytes
+    pub fn public_key_bytes(&self) -> [u8; PUBLIC_KEY_SIZE] {
+        self.inner.verifying_key()
+    }
+
+    /// Sign an arbitrary message, returning the signature bytes
+    pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>> {
+        use ed25519_dalek::Signature;
+        let sig: Signature = self.inner.signing_key.sign(msg);
+        Ok(sig.to_bytes().to_vec())
+    }
+
+    /// Sign schema fingerprint (compat wrapper)
+    pub fn sign_schema(&self, schema_id: &[u8; 8]) -> [u8; SIGNATURE_SIZE] {
+        self.inner.sign_schema(schema_id)
+    }
+
+    /// Expose inner for advanced uses
+    pub fn inner(&self) -> &SigningKeyPair {
+        &self.inner
+    }
+}
+
+/// Compatibility wrapper for the verifying key
+pub struct VerificationKey {
+    inner: VerifyingKeyPair,
+}
+
+impl VerificationKey {
+    pub fn from_bytes(pubkey: &[u8]) -> Result<Self> {
+        if pubkey.len() != PUBLIC_KEY_SIZE {
+            return Err(QrdError::InvalidSchema("public key must be 32 bytes".into()));
+        }
+        let mut arr = [0u8; PUBLIC_KEY_SIZE];
+        arr.copy_from_slice(pubkey);
+        Ok(Self {
+            inner: VerifyingKeyPair::from_bytes(&arr)?,
+        })
+    }
+
+    pub fn verify(&self, msg: &[u8], signature: &[u8]) -> Result<()> {
+        self.inner.verify_message(msg, signature)
+    }
+}
+
+impl SchemaSignature {
+    /// Create a signature by signing the schema bytes (computes fingerprint then signs)
+    pub fn from_keypair(kp: &SigningKeypair, schema_bytes: &[u8]) -> Result<Self> {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(schema_bytes);
+        let digest = hasher.finalize();
+        let mut fingerprint = [0u8; 8];
+        fingerprint.copy_from_slice(&digest[..8]);
+
+        // Use the inner SigningKeyPair's sign_schema to produce a fixed-size array
+        let sig_arr = kp.inner().sign_schema(&fingerprint);
+
+        let pubkey = kp.public_key_bytes();
+
+        Ok(Self::new(SIGNATURE_ALGORITHM, sig_arr, pubkey))
+    }
+
+    /// Compatibility alias for `serialize`
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.serialize()
+    }
+
+    /// Compatibility alias for `deserialize`
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Self::deserialize(bytes)
+    }
+
+    // (compat) `verify` behavior is handled by the primary `verify` above which
+    // accepts either an 8-byte fingerprint or full schema bytes; no extra wrapper
+    // is needed here.
 }
 
 #[cfg(test)]

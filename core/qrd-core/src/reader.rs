@@ -24,6 +24,12 @@ impl FileReader {
         })
     }
 
+    /// Backwards-compatible constructor used by tests and external callers.
+    /// Identical to `open` but matches historical API name `from_bytes`.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Self::open(bytes)
+    }
+
     /// Creates a reader from a schema stub.
     pub fn new(schema: Schema) -> Self {
         let header = FileHeader::new(1, 0, schema.fingerprint(), 0, *b"qrd-0.1.0\0\0\0");

@@ -301,7 +301,7 @@ pub extern "C" fn qrd_writer_finish(
         return QRD_INVALID_ARGUMENT;
     }
 
-    let boxed = unsafe { Box::from_raw(writer_ptr) };
+    let mut boxed = unsafe { Box::from_raw(writer_ptr) };
     match boxed.finish() {
         Ok(bytes) => {
             if bytes.len() > out_capacity {

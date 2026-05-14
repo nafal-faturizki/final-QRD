@@ -98,6 +98,32 @@ impl StreamingWriter {
             build_file_image(&self.schema, &row_groups)
         }
     }
+
+    /// Serializes the current writer state into the provided writer.
+    /// This mirrors historical APIs that accepted a mutable buffer to write
+    /// the canonical file image into without consuming the writer.
+    pub fn serialize<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        // Reconstruct RowGroup objects from stored serialized bytes
+        let row_groups: Vec<RowGroup> = self
+            .row_groups
+            .iter()
+            .map(|bytes| {
+                RowGroup::deserialize(bytes).expect("stored row group bytes must be valid")
+            })
+            .collect();
+
+        let bytes = if let Some(signature) = self.signature.clone() {
+            build_file_image_with_signature(&self.schema, &row_groups, Some(signature))?
+        } else {
+            build_file_image(&self.schema, &row_groups)?
+        };
+
+        writer
+            .write_all(&bytes)
+            .map_err(|e| QrdError::InvalidSchema(format!("io write failed: {}", e)))?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
