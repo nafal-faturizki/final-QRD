@@ -1,14 +1,6 @@
 /// Computes CRC32 using the IEEE polynomial.
 pub fn crc32(bytes: &[u8]) -> u32 {
-    let mut crc = 0xFFFF_FFFFu32;
-    for byte in bytes {
-        crc ^= u32::from(*byte);
-        for _ in 0..8 {
-            let mask = 0u32.wrapping_sub(crc & 1);
-            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
-        }
-    }
-    !crc
+    crc32fast::hash(bytes)
 }
 
 /// Verifies a CRC32 value against the provided payload.

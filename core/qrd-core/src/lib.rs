@@ -19,6 +19,9 @@ pub mod schema;
 pub mod signing;
 pub mod writer;
 
+#[cfg(test)]
+mod generated_unit_tests;
+
 pub use error::{QrdError, Result};
 
 /// Returns the core engine version string.

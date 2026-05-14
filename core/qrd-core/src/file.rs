@@ -28,20 +28,21 @@ pub fn build_file_image_with_signature(
     row_groups: &[RowGroup],
     signature: Option<SchemaSignature>,
 ) -> Result<Vec<u8>> {
+    let serialized_row_groups: Vec<Vec<u8>> = row_groups
+        .iter()
+        .map(RowGroup::serialize)
+        .collect::<Result<Vec<Vec<u8>>>>()?;
+    build_file_image_from_serialized_row_groups(schema, &serialized_row_groups, signature)
+}
+
+pub(crate) fn build_file_image_from_serialized_row_groups(
+    schema: &Schema,
+    row_groups: &[Vec<u8>],
+    signature: Option<SchemaSignature>,
+) -> Result<Vec<u8>> {
     let mut header = FileHeader::new(1, 0, schema.fingerprint(), 0, *b"qrd-0.1.0\0\0\0");
     if signature.is_some() {
         header.set_schema_signed(true);
-    }
-
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&header.serialize());
-
-    for row_group in row_groups {
-        let serialized = row_group.serialize()?;
-        let row_group_len = u32::try_from(serialized.len())
-            .map_err(|_| QrdError::InvalidSchema("row group too large".into()))?;
-        bytes.extend_from_slice(&row_group_len.to_le_bytes());
-        bytes.extend_from_slice(&serialized);
     }
 
     let footer = build_footer(
@@ -51,11 +52,30 @@ pub fn build_file_image_with_signature(
     )?;
     let footer_length = u32::try_from(footer.len())
         .map_err(|_| QrdError::InvalidSchema("footer too large".into()))?;
+
+    let signature_bytes = match signature {
+        Some(sig) => Some(sig.serialize()),
+        None => None,
+    };
+    let signature_length = signature_bytes.as_ref().map(Vec::len).unwrap_or(0);
+    let row_group_bytes_len: usize = row_groups.iter().map(|bytes| 4 + bytes.len()).sum();
+
+    let mut bytes = Vec::with_capacity(HEADER_SIZE + row_group_bytes_len + footer.len() + signature_length + 4);
+    bytes.extend_from_slice(&header.serialize());
+
+    for serialized in row_groups {
+        let row_group_len = u32::try_from(serialized.len())
+            .map_err(|_| QrdError::InvalidSchema("row group too large".into()))?;
+        bytes.extend_from_slice(&row_group_len.to_le_bytes());
+        bytes.extend_from_slice(serialized);
+    }
+
+    bytes.reserve(footer.len() + signature_length + 4);
     bytes.extend_from_slice(&footer);
 
     // Add signature if present (before footer length)
-    if let Some(sig) = signature {
-        bytes.extend_from_slice(&sig.serialize());
+    if let Some(signature_bytes) = signature_bytes {
+        bytes.extend_from_slice(&signature_bytes);
     }
 
     append_footer_length(&mut bytes, footer_length);
@@ -103,7 +123,7 @@ pub fn parse_file_image(bytes: &[u8]) -> Result<ParsedFile> {
         sig.verify(&header.schema_id)?;
     }
 
-    let mut row_groups = Vec::new();
+    let mut row_groups = Vec::with_capacity(footer.row_group_count as usize);
     let mut cursor = HEADER_SIZE;
     while cursor < footer_start {
         let len_bytes = bytes

@@ -39,7 +39,15 @@ impl Schema {
         let field_count = u8::try_from(self.fields.len())
             .map_err(|_| QrdError::InvalidSchema("schema has too many fields".into()))?;
 
-        let mut bytes = Vec::new();
+        let mut capacity = 1usize;
+        for field in &self.fields {
+            let name_len = field.name.len();
+            u8::try_from(name_len)
+                .map_err(|_| QrdError::InvalidSchema("field name is too long".into()))?;
+            capacity += 1 + name_len + 1 + 1;
+        }
+
+        let mut bytes = Vec::with_capacity(capacity);
         bytes.push(field_count);
         for field in &self.fields {
             let name_bytes = field.name.as_bytes();
@@ -56,13 +64,11 @@ impl Schema {
     /// Parses a schema from the compact canonical binary format.
     pub fn deserialize(bytes: &[u8]) -> Result<Self> {
         let mut cursor = 0usize;
-        let field_count = *bytes.get(cursor).ok_or(QrdError::UnexpectedEof)? as usize;
-        cursor += 1;
+        let field_count = read_u8(bytes, &mut cursor)? as usize;
 
         let mut fields = Vec::with_capacity(field_count);
         for _ in 0..field_count {
-            let name_len = *bytes.get(cursor).ok_or(QrdError::UnexpectedEof)? as usize;
-            cursor += 1;
+            let name_len = read_u8(bytes, &mut cursor)? as usize;
 
             let end = cursor
                 .checked_add(name_len)
@@ -73,7 +79,7 @@ impl Schema {
                 .to_string();
             cursor = end;
 
-            let kind = match *bytes.get(cursor).ok_or(QrdError::UnexpectedEof)? {
+            let kind = match read_u8(bytes, &mut cursor)? {
                 0 => FieldKind::Boolean,
                 1 => FieldKind::Int32,
                 2 => FieldKind::Int64,
@@ -86,9 +92,8 @@ impl Schema {
                     )))
                 }
             };
-            cursor += 1;
 
-            let required = match *bytes.get(cursor).ok_or(QrdError::UnexpectedEof)? {
+            let required = match read_u8(bytes, &mut cursor)? {
                 0 => false,
                 1 => true,
                 other => {
@@ -97,7 +102,6 @@ impl Schema {
                     )))
                 }
             };
-            cursor += 1;
 
             fields.push(Field {
                 name,
@@ -136,6 +140,13 @@ impl Schema {
         fingerprint.copy_from_slice(&digest[..8]);
         fingerprint
     }
+}
+
+#[inline]
+fn read_u8(bytes: &[u8], cursor: &mut usize) -> Result<u8> {
+    let value = *bytes.get(*cursor).ok_or(QrdError::UnexpectedEof)?;
+    *cursor += 1;
+    Ok(value)
 }
 
 /// Builder for `Schema`.

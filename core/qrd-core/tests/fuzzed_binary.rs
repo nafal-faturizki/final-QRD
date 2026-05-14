@@ -340,7 +340,7 @@ fn fuzz_multiple_fuzzed_passes() {
             let seed = ((pass as u32) << 16) | (i as u32);
             let mut hasher = DefaultHasher::new();
             seed.hash(&mut hasher);
-            fuzzed[i] ^= (hasher.finish() as u8);
+            fuzzed[i] ^= hasher.finish() as u8;
         }
         
         let result = FileReader::open(&fuzzed);

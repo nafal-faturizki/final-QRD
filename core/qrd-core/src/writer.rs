@@ -1,5 +1,5 @@
 use crate::error::{QrdError, Result};
-use crate::file::{build_file_image, build_file_image_with_signature};
+use crate::file::build_file_image_from_serialized_row_groups;
 use crate::parser::{build_footer, FileHeader};
 use crate::row_group::RowGroup;
 use crate::schema::Schema;
@@ -13,12 +13,18 @@ pub struct StreamingWriter {
     row_group_count: u32,
     row_groups: Vec<Vec<u8>>,
     signature: Option<SchemaSignature>,
+    column_names: Vec<String>,
 }
 
 impl StreamingWriter {
     /// Creates a new writer.
     pub fn new(schema: Schema) -> Self {
         let header = FileHeader::new(1, 0, schema.fingerprint(), 0, *b"qrd-0.1.0\0\0\0");
+        let column_names = schema
+            .fields()
+            .iter()
+            .map(|field| field.name.clone())
+            .collect();
         Self {
             schema,
             finished: false,
@@ -26,6 +32,7 @@ impl StreamingWriter {
             row_group_count: 0,
             row_groups: Vec::new(),
             signature: None,
+            column_names,
         }
     }
 
@@ -49,14 +56,7 @@ impl StreamingWriter {
         if self.finished {
             return Err(QrdError::InvalidSchema("writer already finished".into()));
         }
-        let column_names: Vec<&str> = self
-            .schema
-            .fields()
-            .iter()
-            .map(|field| field.name.as_str())
-            .collect();
-        let row_group = RowGroup::from_rows_with_names(rows, &column_names)?;
-        let serialized = row_group.serialize()?;
+        let serialized = RowGroup::serialize_plain_from_rows_with_owned_names(rows, &self.column_names)?;
         self.row_group_count = self
             .row_group_count
             .checked_add(1)
@@ -82,41 +82,22 @@ impl StreamingWriter {
         }
         self.finished = true;
 
-        let row_groups: Vec<RowGroup> = self
-            .row_groups
-            .iter()
-            .map(|bytes| {
-                // parse raw row group bytes back into RowGroup objects so the file builder
-                // can preserve canonical semantics when writing.
-                RowGroup::deserialize(bytes).expect("stored row group bytes must be valid")
-            })
-            .collect();
-
-        if let Some(signature) = self.signature.clone() {
-            build_file_image_with_signature(&self.schema, &row_groups, Some(signature))
-        } else {
-            build_file_image(&self.schema, &row_groups)
-        }
+        build_file_image_from_serialized_row_groups(
+            &self.schema,
+            &self.row_groups,
+            self.signature.clone(),
+        )
     }
 
     /// Serializes the current writer state into the provided writer.
     /// This mirrors historical APIs that accepted a mutable buffer to write
     /// the canonical file image into without consuming the writer.
     pub fn serialize<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        // Reconstruct RowGroup objects from stored serialized bytes
-        let row_groups: Vec<RowGroup> = self
-            .row_groups
-            .iter()
-            .map(|bytes| {
-                RowGroup::deserialize(bytes).expect("stored row group bytes must be valid")
-            })
-            .collect();
-
-        let bytes = if let Some(signature) = self.signature.clone() {
-            build_file_image_with_signature(&self.schema, &row_groups, Some(signature))?
-        } else {
-            build_file_image(&self.schema, &row_groups)?
-        };
+        let bytes = build_file_image_from_serialized_row_groups(
+            &self.schema,
+            &self.row_groups,
+            self.signature.clone(),
+        )?;
 
         writer
             .write_all(&bytes)

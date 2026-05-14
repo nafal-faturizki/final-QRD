@@ -331,7 +331,7 @@ fn full_pipeline_many_fields_many_rows() {
     
     let mut writer = StreamingWriter::new(schema.clone());
     let rows: Vec<Vec<u8>> = (0..1000)
-        .map(|i| (0..50).map(|j| (((i + j) % 256) as u8)).collect())
+        .map(|i| (0..50).map(|j| ((i + j) % 256) as u8).collect())
         .collect();
     writer.write_row_group(&rows).expect("should write");
     

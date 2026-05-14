@@ -1,9 +1,11 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use qrd_core::compression::{compress, decompress, CompressionKind};
 use qrd_core::encoding::{decode, encode, EncodingId};
 use qrd_core::encryption::{decrypt_payload, derive_column_key, encrypt_payload, EncryptionConfig};
 use qrd_core::integrity::crc32;
 use qrd_core::schema::FieldKind;
+use qrd_core::schema::SchemaBuilder;
+use qrd_core::writer::StreamingWriter;
 
 fn benchmark_crc32(c: &mut Criterion) {
     c.bench_function("crc32_small_payload", |b| {
@@ -37,7 +39,7 @@ fn benchmark_encodings(c: &mut Criterion) {
         (0..1_000u16)
             .cycle()
             .take(10_000)
-            .map(|x| x as u8)
+            .map(|x| (x % 64) as u8)
             .collect::<Vec<u8>>(),
     );
 
@@ -147,12 +149,54 @@ fn benchmark_encryption(c: &mut Criterion) {
     });
 }
 
+fn benchmark_writer(c: &mut Criterion) {
+    let schema = SchemaBuilder::new()
+        .add_field("device_id", FieldKind::Utf8, true)
+        .add_field("status", FieldKind::Int32, false)
+        .build()
+        .expect("schema should build");
+    let rows = black_box(vec![
+        vec![1, 2],
+        vec![3, 4],
+        vec![5, 6],
+        vec![7, 8],
+    ]);
+
+    c.bench_function("writer_write_row_group_small", |b| {
+        b.iter_batched(
+            || StreamingWriter::new(schema.clone()),
+            |mut writer| {
+                writer
+                    .write_row_group(black_box(&rows))
+                    .expect("row group write should work");
+                black_box(writer)
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    c.bench_function("writer_finish_small", |b| {
+        b.iter_batched(
+            || {
+                let mut writer = StreamingWriter::new(schema.clone());
+                writer
+                    .write_row_group(&rows)
+                    .expect("row group write should work");
+                writer
+            },
+            |mut writer| black_box(writer.finish().expect("writer should finish")),
+            BatchSize::SmallInput,
+        )
+    });
+}
+
 criterion_group!(
     benches,
     benchmark_crc32,
     benchmark_schema_fingerprint,
     benchmark_encodings,
     benchmark_compression,
-    benchmark_encryption
+    benchmark_encryption,
+    benchmark_writer
 );
 criterion_main!(benches);

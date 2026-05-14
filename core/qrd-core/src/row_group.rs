@@ -49,6 +49,15 @@ impl RowGroup {
 
     /// Creates a row group from a list of row buffers and explicit column names.
     pub fn from_rows_with_names(rows: &[Vec<u8>], column_names: &[&str]) -> Result<Self> {
+        let column_names = column_names.iter().map(|name| (*name).to_string()).collect::<Vec<String>>();
+        Self::from_rows_with_owned_names(rows, &column_names)
+    }
+
+    /// Creates a row group from a list of row buffers and owned column names.
+    pub(crate) fn from_rows_with_owned_names(
+        rows: &[Vec<u8>],
+        column_names: &[String],
+    ) -> Result<Self> {
         if !rows.is_empty() {
             let row_count = u32::try_from(rows.len())
                 .map_err(|_| QrdError::InvalidSchema("row group is too large".into()))?;
@@ -67,7 +76,11 @@ impl RowGroup {
             let columns_data = transpose_rows(rows)?;
             let mut columns = Vec::with_capacity(width);
             for (name, column) in column_names.iter().zip(columns_data) {
-                columns.push(ColumnChunk::new(*name, &column, EncodingId::Plain)?);
+                columns.push(ColumnChunk {
+                    name: name.clone(),
+                    encoding: EncodingId::Plain,
+                    data: column,
+                });
             }
 
             return Ok(Self { row_count, columns });
@@ -76,7 +89,11 @@ impl RowGroup {
         // Empty row group preserves schema field names when provided.
         let mut columns = Vec::with_capacity(column_names.len());
         for name in column_names {
-            columns.push(ColumnChunk::new(*name, &[], EncodingId::Plain)?);
+            columns.push(ColumnChunk {
+                name: name.clone(),
+                encoding: EncodingId::Plain,
+                data: Vec::new(),
+            });
         }
 
         Ok(Self {
@@ -85,12 +102,110 @@ impl RowGroup {
         })
     }
 
+    /// Serializes a plain row group directly from rows and owned column names.
+    pub(crate) fn serialize_plain_from_rows_with_owned_names(
+        rows: &[Vec<u8>],
+        column_names: &[String],
+    ) -> Result<Vec<u8>> {
+        if !rows.is_empty() {
+            let row_count = u32::try_from(rows.len())
+                .map_err(|_| QrdError::InvalidSchema("row group is too large".into()))?;
+            let width = rows[0].len();
+            if rows.iter().any(|row| row.len() != width) {
+                return Err(QrdError::InvalidSchema(
+                    "rows must have uniform width".into(),
+                ));
+            }
+            if column_names.len() != width {
+                return Err(QrdError::InvalidSchema(
+                    "column count does not match row width".into(),
+                ));
+            }
+
+            let columns_data = transpose_rows(rows)?;
+            let column_count = u32::try_from(column_names.len())
+                .map_err(|_| QrdError::InvalidSchema("too many columns in row group".into()))?;
+            let mut body_capacity = 8usize;
+            for (name, column) in column_names.iter().zip(&columns_data) {
+                let name_len = name.len();
+                let data_len = column.len();
+                u8::try_from(name_len)
+                    .map_err(|_| QrdError::InvalidSchema("column name too long".into()))?;
+                u32::try_from(data_len)
+                    .map_err(|_| QrdError::InvalidSchema("column chunk too large".into()))?;
+                body_capacity += 1 + name_len + 1 + 4 + data_len + 4;
+            }
+
+            let mut body = Vec::with_capacity(body_capacity);
+            body.extend_from_slice(&row_count.to_le_bytes());
+            body.extend_from_slice(&column_count.to_le_bytes());
+
+            for (name, column) in column_names.iter().zip(columns_data) {
+                let name_bytes = name.as_bytes();
+                let name_len = u8::try_from(name_bytes.len())
+                    .map_err(|_| QrdError::InvalidSchema("column name too long".into()))?;
+                let data_len = u32::try_from(column.len())
+                    .map_err(|_| QrdError::InvalidSchema("column chunk too large".into()))?;
+
+                body.push(name_len);
+                body.extend_from_slice(name_bytes);
+                body.push(EncodingId::Plain.as_u8());
+                body.extend_from_slice(&data_len.to_le_bytes());
+                body.extend_from_slice(&column);
+                let checksum = crc32(&column);
+                body.extend_from_slice(&checksum.to_le_bytes());
+            }
+
+            return Ok(body);
+        }
+
+        let mut body_capacity = 8usize;
+        for name in column_names {
+            let name_len = name.len();
+            u8::try_from(name_len)
+                .map_err(|_| QrdError::InvalidSchema("column name too long".into()))?;
+            body_capacity += 1 + name_len + 1 + 4 + 0 + 4;
+        }
+
+        let column_count = u32::try_from(column_names.len())
+            .map_err(|_| QrdError::InvalidSchema("too many columns in row group".into()))?;
+
+        let mut body = Vec::with_capacity(body_capacity);
+        body.extend_from_slice(&0u32.to_le_bytes());
+        body.extend_from_slice(&column_count.to_le_bytes());
+
+        for name in column_names {
+            let name_bytes = name.as_bytes();
+            let name_len = u8::try_from(name_bytes.len())
+                .map_err(|_| QrdError::InvalidSchema("column name too long".into()))?;
+            body.push(name_len);
+            body.extend_from_slice(name_bytes);
+            body.push(EncodingId::Plain.as_u8());
+            body.extend_from_slice(&0u32.to_le_bytes());
+            let checksum = crc32(&[]);
+            body.extend_from_slice(&checksum.to_le_bytes());
+        }
+
+        Ok(body)
+    }
+
     /// Serializes the row group into a canonical binary representation.
     pub fn serialize(&self) -> Result<Vec<u8>> {
         let column_count = u32::try_from(self.columns.len())
             .map_err(|_| QrdError::InvalidSchema("too many columns in row group".into()))?;
 
-        let mut body = Vec::new();
+        let mut body_capacity = 8usize;
+        for column in &self.columns {
+            let name_len = column.name.len();
+            let data_len = column.data.len();
+            u8::try_from(name_len)
+                .map_err(|_| QrdError::InvalidSchema("column name too long".into()))?;
+            u32::try_from(data_len)
+                .map_err(|_| QrdError::InvalidSchema("column chunk too large".into()))?;
+            body_capacity += 1 + name_len + 1 + 4 + data_len + 4;
+        }
+
+        let mut body = Vec::with_capacity(body_capacity);
         body.extend_from_slice(&self.row_count.to_le_bytes());
         body.extend_from_slice(&column_count.to_le_bytes());
 
@@ -116,32 +231,13 @@ impl RowGroup {
     /// Parses a row group from the canonical binary representation.
     pub fn deserialize(bytes: &[u8]) -> Result<Self> {
         let mut cursor = 0usize;
-        let row_count_bytes = bytes
-            .get(cursor..cursor + 4)
-            .ok_or(QrdError::UnexpectedEof)?;
-        let row_count = u32::from_le_bytes([
-            row_count_bytes[0],
-            row_count_bytes[1],
-            row_count_bytes[2],
-            row_count_bytes[3],
-        ]);
-        cursor += 4;
+        let row_count = read_u32_le(bytes, &mut cursor)?;
 
-        let column_count_bytes = bytes
-            .get(cursor..cursor + 4)
-            .ok_or(QrdError::UnexpectedEof)?;
-        let column_count = u32::from_le_bytes([
-            column_count_bytes[0],
-            column_count_bytes[1],
-            column_count_bytes[2],
-            column_count_bytes[3],
-        ]) as usize;
-        cursor += 4;
+        let column_count = read_u32_le(bytes, &mut cursor)? as usize;
 
         let mut columns = Vec::with_capacity(column_count);
         for _ in 0..column_count {
-            let name_len = *bytes.get(cursor).ok_or(QrdError::UnexpectedEof)? as usize;
-            cursor += 1;
+            let name_len = read_u8(bytes, &mut cursor)? as usize;
 
             let name_end = cursor
                 .checked_add(name_len)
@@ -152,39 +248,17 @@ impl RowGroup {
                 .to_string();
             cursor = name_end;
 
-            let encoding = EncodingId::from_u8(*bytes.get(cursor).ok_or(QrdError::UnexpectedEof)?)?;
-            cursor += 1;
+                let encoding = EncodingId::from_u8(read_u8(bytes, &mut cursor)?)?;
 
-            let data_len_bytes = bytes
-                .get(cursor..cursor + 4)
-                .ok_or(QrdError::UnexpectedEof)?;
-            let data_len = u32::from_le_bytes([
-                data_len_bytes[0],
-                data_len_bytes[1],
-                data_len_bytes[2],
-                data_len_bytes[3],
-            ]) as usize;
-            cursor += 4;
+                let data_len = read_u32_le(bytes, &mut cursor)? as usize;
 
             let data_end = cursor
                 .checked_add(data_len)
                 .ok_or_else(|| QrdError::InvalidSchema("column data overflow".into()))?;
-            let data = bytes
-                .get(cursor..data_end)
-                .ok_or(QrdError::UnexpectedEof)?
-                .to_vec();
+                let data = bytes.get(cursor..data_end).ok_or(QrdError::UnexpectedEof)?.to_vec();
             cursor = data_end;
 
-            let checksum_bytes = bytes
-                .get(cursor..cursor + 4)
-                .ok_or(QrdError::UnexpectedEof)?;
-            let expected_checksum = u32::from_le_bytes([
-                checksum_bytes[0],
-                checksum_bytes[1],
-                checksum_bytes[2],
-                checksum_bytes[3],
-            ]);
-            cursor += 4;
+                let expected_checksum = read_u32_le(bytes, &mut cursor)?;
 
             if crc32(&data) != expected_checksum {
                 return Err(QrdError::InvalidSchema("column checksum mismatch".into()));
@@ -205,6 +279,23 @@ impl RowGroup {
 
         Ok(Self { row_count, columns })
     }
+}
+
+#[inline]
+fn read_u8(bytes: &[u8], cursor: &mut usize) -> Result<u8> {
+    let value = *bytes.get(*cursor).ok_or(QrdError::UnexpectedEof)?;
+    *cursor += 1;
+    Ok(value)
+}
+
+#[inline]
+fn read_u32_le(bytes: &[u8], cursor: &mut usize) -> Result<u32> {
+    let end = cursor
+        .checked_add(4)
+        .ok_or_else(|| QrdError::InvalidSchema("column header overflow".into()))?;
+    let slice = bytes.get(*cursor..end).ok_or(QrdError::UnexpectedEof)?;
+    *cursor = end;
+    Ok(u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]))
 }
 
 #[cfg(test)]

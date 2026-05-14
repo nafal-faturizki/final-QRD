@@ -1,5 +1,4 @@
 use crate::error::{QrdError, Result};
-use std::collections::HashMap;
 
 /// Encoding identifiers mandated by Phase 1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,7 +59,8 @@ pub fn decode(values: &[u8], encoding: EncodingId) -> Result<Vec<u8>> {
 }
 
 fn encode_rle(values: &[u8]) -> Result<Vec<u8>> {
-    let mut output = Vec::new();
+    // Worst-case each input byte becomes 3 output bytes (2-byte length + 1 value)
+    let mut output = Vec::with_capacity(values.len().saturating_mul(3));
     let mut cursor = 0usize;
     while cursor < values.len() {
         let value = values[cursor];
@@ -94,13 +94,13 @@ fn decode_rle(values: &[u8]) -> Result<Vec<u8>> {
         let value = *values.get(cursor).ok_or(QrdError::UnexpectedEof)?;
         cursor += 1;
 
+        output.reserve(usize::from(run_length));
         output.resize(output.len() + usize::from(run_length), value);
     }
     Ok(output)
 }
 
 fn encode_bit_packed(values: &[u8]) -> Result<Vec<u8>> {
-    let mut output = Vec::new();
     let len = u32::try_from(values.len())
         .map_err(|_| QrdError::InvalidSchema("payload too large".into()))?;
     let bit_width = if values.is_empty() {
@@ -121,38 +121,30 @@ fn encode_bit_packed(values: &[u8]) -> Result<Vec<u8>> {
             .unwrap_or(1)
     };
 
-    output.extend_from_slice(&len.to_le_bytes());
-    output.push(bit_width);
-
     if values.is_empty() {
+        let mut output = vec![0u8; 5];
+        output[..4].copy_from_slice(&len.to_le_bytes());
+        output[4] = bit_width;
         return Ok(output);
     }
 
     let total_bits = usize::from(bit_width) * values.len();
-    let mut bit_buffer = Vec::with_capacity(total_bits.div_ceil(8));
-    let mut current_byte = 0u8;
-    let mut bits_in_current = 0u8;
+    let mut output = vec![0u8; 5 + total_bits.div_ceil(8)];
+    output[..4].copy_from_slice(&len.to_le_bytes());
+    output[4] = bit_width;
+    let payload_offset = 5;
+    let mut bit_position = 0usize;
 
     for value in values {
         let mut remaining = *value;
         for _ in 0..bit_width {
-            let bit = remaining & 1;
-            current_byte |= bit << bits_in_current;
-            bits_in_current += 1;
+            let byte_index = payload_offset + (bit_position >> 3);
+            let bit_offset = (bit_position & 7) as u8;
+            output[byte_index] |= (remaining & 1) << bit_offset;
+            bit_position += 1;
             remaining >>= 1;
-            if bits_in_current == 8 {
-                bit_buffer.push(current_byte);
-                current_byte = 0;
-                bits_in_current = 0;
-            }
         }
     }
-
-    if bits_in_current > 0 {
-        bit_buffer.push(current_byte);
-    }
-
-    output.extend_from_slice(&bit_buffer);
     Ok(output)
 }
 
@@ -178,18 +170,18 @@ fn decode_bit_packed(values: &[u8]) -> Result<Vec<u8>> {
         return Err(QrdError::UnexpectedEof);
     }
 
-    let mut output = Vec::with_capacity(original_len);
-    let mut bit_cursor = 0;
-    for _ in 0..original_len {
+    let mut output = vec![0u8; original_len];
+    let mut bit_cursor = 0usize;
+    for output_byte in output.iter_mut() {
         let mut value = 0u8;
         for bit_index in 0..bit_width {
-            let byte_index = bit_cursor / 8;
-            let bit_offset = bit_cursor % 8;
+            let byte_index = bit_cursor >> 3;
+            let bit_offset = (bit_cursor & 7) as u8;
             let bit = (payload[byte_index] >> bit_offset) & 1;
             value |= bit << bit_index;
             bit_cursor += 1;
         }
-        output.push(value);
+        *output_byte = value;
     }
 
     Ok(output)
@@ -200,10 +192,10 @@ fn encode_delta_binary(values: &[u8]) -> Result<Vec<u8>> {
         return Ok(Vec::new());
     }
 
-    let mut output = Vec::with_capacity(values.len());
-    output.push(values[0]);
+    let mut output = vec![0u8; values.len()];
+    output[0] = values[0];
     for index in 1..values.len() {
-        output.push(values[index].wrapping_sub(values[index - 1]));
+        output[index] = values[index].wrapping_sub(values[index - 1]);
     }
     Ok(output)
 }
@@ -213,28 +205,27 @@ fn decode_delta_binary(values: &[u8]) -> Result<Vec<u8>> {
         return Ok(Vec::new());
     }
 
-    let mut output = Vec::with_capacity(values.len());
-    output.push(values[0]);
+    let mut output = vec![0u8; values.len()];
+    output[0] = values[0];
     for index in 1..values.len() {
-        let next = output[index - 1].wrapping_add(values[index]);
-        output.push(next);
+        output[index] = output[index - 1].wrapping_add(values[index]);
     }
     Ok(output)
 }
 
 fn encode_delta_byte_array(values: &[u8]) -> Result<Vec<u8>> {
-    let mut output = Vec::with_capacity(values.len() + 4);
     let len = u32::try_from(values.len())
         .map_err(|_| QrdError::InvalidSchema("payload too large".into()))?;
-    output.extend_from_slice(&len.to_le_bytes());
+    let mut output = vec![0u8; values.len() + 4];
+    output[..4].copy_from_slice(&len.to_le_bytes());
 
     if values.is_empty() {
         return Ok(output);
     }
 
-    output.push(values[0]);
+    output[4] = values[0];
     for index in 1..values.len() {
-        output.push(values[index].wrapping_sub(values[index - 1]));
+        output[4 + index] = values[index].wrapping_sub(values[index - 1]);
     }
     Ok(output)
 }
@@ -259,24 +250,27 @@ fn decode_delta_byte_array(values: &[u8]) -> Result<Vec<u8>> {
         return Ok(Vec::new());
     }
 
-    let mut output = Vec::with_capacity(original_len);
-    output.push(payload[0]);
+    let mut output = vec![0u8; original_len];
+    output[0] = payload[0];
     for index in 1..payload.len() {
-        output.push(output[index - 1].wrapping_add(payload[index]));
+        output[index] = output[index - 1].wrapping_add(payload[index]);
     }
 
     Ok(output)
 }
 
 fn encode_byte_stream_split(values: &[u8]) -> Result<Vec<u8>> {
-    let mut output = Vec::with_capacity(4 + values.len().saturating_mul(8));
     let len = u32::try_from(values.len())
         .map_err(|_| QrdError::InvalidSchema("payload too large".into()))?;
+    let mut output = Vec::with_capacity(4 + values.len().saturating_mul(8));
     output.extend_from_slice(&len.to_le_bytes());
+    let payload_start = output.len();
+    output.resize(payload_start + values.len() * 8, 0);
 
     for bit_plane in 0..8 {
-        for value in values {
-            output.push((value >> bit_plane) & 1);
+        let plane_offset = payload_start + bit_plane * values.len();
+        for (index, value) in values.iter().enumerate() {
+            output[plane_offset + index] = (value >> bit_plane) & 1;
         }
     }
     Ok(output)
@@ -300,31 +294,34 @@ fn decode_byte_stream_split(values: &[u8]) -> Result<Vec<u8>> {
     }
 
     let mut output = vec![0u8; original_len];
-    let mut cursor = 0usize;
-    for bit_plane in 0..8 {
-        for output_byte in output.iter_mut().take(original_len) {
-            let bit = payload[cursor] & 1;
-            *output_byte |= bit << bit_plane;
-            cursor += 1;
+    for (bit_plane, plane) in payload.chunks_exact(original_len).enumerate() {
+        let shift = bit_plane as u8;
+        for (output_byte, bit) in output.iter_mut().zip(plane) {
+            *output_byte |= (bit & 1) << shift;
         }
     }
     Ok(output)
 }
 
 fn encode_dict_rle(values: &[u8]) -> Result<Vec<u8>> {
-    let mut dictionary = Vec::new();
-    let mut index_map = HashMap::new();
+    let mut dictionary = Vec::with_capacity(usize::from(u8::MAX));
+    let mut index_map = [u8::MAX; 256];
 
     for value in values {
-        index_map.entry(*value).or_insert_with(|| {
-            let next_index = dictionary.len() as u8;
+        let slot = &mut index_map[usize::from(*value)];
+        if *slot == u8::MAX {
+            let next_index = u8::try_from(dictionary.len()).map_err(|_| {
+                QrdError::InvalidSchema("dictionary encoding supports at most 255 unique values".into())
+            })?;
             dictionary.push(*value);
-            next_index
-        });
+            *slot = next_index;
+        }
     }
 
-    let mut output = Vec::new();
-    output.push(dictionary.len() as u8);
+    let mut output = Vec::with_capacity(1 + dictionary.len() + 4 + values.len());
+    output.push(u8::try_from(dictionary.len()).map_err(|_| {
+        QrdError::InvalidSchema("dictionary encoding supports at most 255 unique values".into())
+    })?);
     output.extend_from_slice(&dictionary);
     let len = u32::try_from(values.len())
         .map_err(|_| QrdError::InvalidSchema("payload too large".into()))?;
@@ -332,7 +329,7 @@ fn encode_dict_rle(values: &[u8]) -> Result<Vec<u8>> {
 
     for value in values {
         let index = index_map
-            .get(value)
+            .get(usize::from(*value))
             .copied()
             .ok_or_else(|| QrdError::InvalidSchema("dictionary encoding failure".into()))?;
         output.push(index);

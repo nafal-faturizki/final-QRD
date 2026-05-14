@@ -159,7 +159,7 @@ pub fn build_footer(schema: &Schema, row_group_count: u32) -> Result<Vec<u8>> {
     let schema_len = u32::try_from(schema_bytes.len())
         .map_err(|_| QrdError::InvalidSchema("schema payload too large".into()))?;
 
-    let mut body = Vec::new();
+    let mut body = Vec::with_capacity(1 + 4 + schema_bytes.len() + 4 + 4);
     body.push(1u8);
     body.extend_from_slice(&schema_len.to_le_bytes());
     body.extend_from_slice(&schema_bytes);

@@ -4,7 +4,6 @@ use qrd_core::reader::FileReader;
 use qrd_core::schema::{FieldKind, SchemaBuilder};
 use qrd_core::writer::StreamingWriter;
 use qrd_core::encryption::{encrypt_payload, generate_nonce, EncryptionConfig};
-use std::collections::HashSet;
 
 // ============= Replay Attack Detection Tests =============
 

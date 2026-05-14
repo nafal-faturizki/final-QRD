@@ -6,6 +6,7 @@ use reed_solomon_erasure::galois_8::Field as Gf8;
 const GF_PRIMITIVE: u16 = 0x11d;
 
 #[inline]
+#[allow(dead_code)]
 fn gf_add(a: u8, b: u8) -> u8 {
     a ^ b
 }
@@ -197,7 +198,7 @@ pub fn recover_missing_chunk(
         }
     }
 
-    let width = width.ok_or(QrdError::UnexpectedEof)?;
+    let _width = width.ok_or(QrdError::UnexpectedEof)?;
 
     let r = ReedSolomon::<Gf8>::new(config.data_chunks, config.parity_chunks)
         .map_err(|e| QrdError::InvalidSchema(format!("reed-solomon init failed: {}", e)))?;

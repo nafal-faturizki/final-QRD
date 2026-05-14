@@ -204,7 +204,7 @@ fn corruption_checksum_validation() {
     let rows: Vec<Vec<u8>> = (0..5).map(|i| vec![i as u8, (i >> 8) as u8]).collect();
     writer.write_row_group(&rows).expect("should write");
     
-    let buffer = writer.finish().expect("should finish");
+    let _buffer = writer.finish().expect("should finish");
     
     // Test CRC32 detection
     let test_data = b"test data";

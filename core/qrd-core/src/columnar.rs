@@ -13,10 +13,12 @@ pub fn transpose_rows(rows: &[Vec<u8>]) -> Result<Vec<Vec<u8>>> {
         ));
     }
 
-    let mut columns = vec![Vec::with_capacity(rows.len()); width];
+    let mut columns = (0..width)
+        .map(|_| Vec::with_capacity(rows.len()))
+        .collect::<Vec<Vec<u8>>>();
     for row in rows {
-        for (index, value) in row.iter().copied().enumerate() {
-            columns[index].push(value);
+        for (column, value) in columns.iter_mut().zip(row) {
+            column.push(*value);
         }
     }
     Ok(columns)
