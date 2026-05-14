@@ -556,6 +556,8 @@ Level 3: Per file footer
 
 ### Reed-Solomon Error Correction
 
+> **Disclaimer**: Implementasi ECC saat ini masih menggunakan XOR parity. Klaim Reed-Solomon spesifik di bawah ini bersifat **Planned** sampai milestone ECC-01 selesai.
+
 ```
 ECC Configuration per Row Group:
   DATA_CHUNKS   : N column chunks (actual data)
@@ -569,9 +571,9 @@ Applicable to:
   ✓ Degraded media (HDDs with bad sectors)
   ✓ Archival storage with durability SLAs
 
-Typical parameters:
-  RS(32,8)   → tolerates 8 corrupted chunks out of 32 total
-  RS(16,4)   → tolerates 4 corrupted chunks out of 16 total
+Typical parameters (Planned):
+  RS(32,8)   → planned for ECC-01; tolerates 8 corrupted chunks out of 32 total
+  RS(16,4)   → planned for ECC-01; tolerates 4 corrupted chunks out of 16 total
 ```
 
 ### Parser Hardening (Zero-Panic Policy)

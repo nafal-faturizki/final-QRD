@@ -1,0 +1,42 @@
+[package]
+name = "qrd-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+qrd-core = { path = "../core/qrd-core" }
+
+[[bin]]
+name = "parse_header"
+path = "fuzz_targets/parse_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_footer"
+path = "fuzz_targets/parse_footer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decompress"
+path = "fuzz_targets/decompress.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decrypt_payload"
+path = "fuzz_targets/decrypt_payload.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

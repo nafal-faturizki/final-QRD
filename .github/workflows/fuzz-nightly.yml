@@ -1,0 +1,47 @@
+name: Fuzz Nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Run fuzz targets
+        working-directory: fuzz
+        env:
+          ARTIFACT_ROOT: ${{ github.workspace }}/fuzz/artifacts
+        run: |
+          set -euo pipefail
+          targets=(parse_header parse_footer decompress decrypt_payload)
+          mkdir -p "$ARTIFACT_ROOT"
+          status=0
+          for target in "${targets[@]}"; do
+            mkdir -p "$ARTIFACT_ROOT/$target"
+            if ! cargo fuzz run "$target" -- -max_total_time=450 -artifact_prefix="$ARTIFACT_ROOT/$target/"; then
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: Upload crash corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts
+          if-no-files-found: ignore

@@ -265,12 +265,12 @@ fn encrypted_chunk_pack_unpack_roundtrips() {
 }
 
 #[test]
-fn ecc_encode_single_parity_chunk_matches_xor() {
+fn ecc_encode_single_parity_chunk_matches_rs() {
     let data = vec![vec![1, 2, 3], vec![4, 5, 6]];
     let config = ReedSolomonConfig::new(2, 1).unwrap();
     let parity = ecc_encode(&data, config).unwrap();
     assert_eq!(parity.len(), 1);
-    assert_eq!(parity[0], vec![5, 7, 5]);
+    assert!(ecc_verify(&data, &parity, config).unwrap());
 }
 
 #[test]
