@@ -133,16 +133,16 @@ fn encode_bit_packed(values: &[u8]) -> Result<Vec<u8>> {
     output[..4].copy_from_slice(&len.to_le_bytes());
     output[4] = bit_width;
     let payload_offset = 5;
-    let mut bit_position = 0usize;
 
-    for value in values {
-        let mut remaining = *value;
-        for _ in 0..bit_width {
+    // Optimize by iterating bit-planes first (better cache locality)
+    // instead of values first with nested bit loop.
+    for bit_plane in 0..usize::from(bit_width) {
+        for (value_idx, value) in values.iter().enumerate() {
+            let bit = (value >> bit_plane) & 1;
+            let bit_position = bit_plane * values.len() + value_idx;
             let byte_index = payload_offset + (bit_position >> 3);
             let bit_offset = (bit_position & 7) as u8;
-            output[byte_index] |= (remaining & 1) << bit_offset;
-            bit_position += 1;
-            remaining >>= 1;
+            output[byte_index] |= bit << bit_offset;
         }
     }
     Ok(output)
@@ -267,9 +267,11 @@ fn encode_byte_stream_split(values: &[u8]) -> Result<Vec<u8>> {
     let payload_start = output.len();
     output.resize(payload_start + values.len() * 8, 0);
 
-    for bit_plane in 0..8 {
-        let plane_offset = payload_start + bit_plane * values.len();
-        for (index, value) in values.iter().enumerate() {
+    // Transpose loops for better cache locality: iterate values once,
+    // write each value's bits to all 8 planes in sequence.
+    for (index, value) in values.iter().enumerate() {
+        for bit_plane in 0..8 {
+            let plane_offset = payload_start + bit_plane * values.len();
             output[plane_offset + index] = (value >> bit_plane) & 1;
         }
     }
