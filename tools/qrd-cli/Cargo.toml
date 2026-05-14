@@ -7,6 +7,18 @@ edition = "2021"
 name = "qrd-inspect"
 path = "src/main.rs"
 
+[[bin]]
+name = "qrd-verify"
+path = "src/bin/qrd-verify.rs"
+
+[[bin]]
+name = "qrd-convert"
+path = "src/bin/qrd-convert.rs"
+
+[[bin]]
+name = "qrd-keygen"
+path = "src/bin/qrd-keygen.rs"
+
 [lib]
 name = "qrd_cli"
 path = "src/lib.rs"
@@ -14,3 +26,4 @@ path = "src/lib.rs"
 [dependencies]
 qrd-core = { path = "../../core/qrd-core" }
 rand = "0.8"
+serde_json = "1.0"

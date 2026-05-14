@@ -76,12 +76,12 @@ impl StreamingWriter {
     }
 
     /// Finalizes the file and returns a complete QRD image.
-    pub fn finish(mut self) -> Result<Vec<u8>> {
+    pub fn finish(&mut self) -> Result<Vec<u8>> {
         if self.finished {
             return Err(QrdError::InvalidSchema("writer already finished".into()));
         }
         self.finished = true;
-        
+
         let row_groups: Vec<RowGroup> = self
             .row_groups
             .iter()
@@ -92,7 +92,7 @@ impl StreamingWriter {
             })
             .collect();
 
-        if let Some(signature) = self.signature {
+        if let Some(signature) = self.signature.clone() {
             build_file_image_with_signature(&self.schema, &row_groups, Some(signature))
         } else {
             build_file_image(&self.schema, &row_groups)

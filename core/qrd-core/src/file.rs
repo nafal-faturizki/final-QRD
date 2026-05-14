@@ -76,7 +76,12 @@ pub fn parse_file_image(bytes: &[u8]) -> Result<ParsedFile> {
 
     // Determine if there's a signature before the footer length
     let signature_size = if header.is_schema_signed() { 97 } else { 0 }; // 1 + 64 + 32
-    let footer_start = bytes.len() - 4 - footer_length - signature_size;
+    let footer_start = bytes
+        .len()
+        .checked_sub(4)
+        .and_then(|size| size.checked_sub(footer_length))
+        .and_then(|size| size.checked_sub(signature_size))
+        .ok_or(QrdError::InvalidFooterLength)?;
 
     if footer_start < HEADER_SIZE {
         return Err(QrdError::InvalidFooterLength);

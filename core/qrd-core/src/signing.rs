@@ -67,6 +67,13 @@ impl VerifyingKeyPair {
     pub fn from_bytes(pubkey_bytes: &[u8; 32]) -> Result<Self> {
         let verifying_key = VerifyingKey::from_bytes(pubkey_bytes)
             .map_err(|e| QrdError::InvalidSchema(format!("invalid public key: {}", e)))?;
+
+        if verifying_key.is_weak() {
+            return Err(QrdError::InvalidSchema(
+                "invalid public key: weak key detected".into(),
+            ));
+        }
+
         Ok(Self { verifying_key })
     }
 

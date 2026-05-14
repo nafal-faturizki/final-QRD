@@ -240,7 +240,7 @@ mod extended_cli_tests {
         let output = std::env::temp_dir().join("qrd-cli-convert-output.qrd");
         fs::write(&input, b"data").expect("should write input");
 
-        let result = convert_placeholder("csv", &input, &output);
+        let result = convert_file("csv", &input, &output);
         assert!(result.is_ok());
         assert!(output.exists());
         let _ = fs::remove_file(&input);
@@ -253,7 +253,7 @@ mod extended_cli_tests {
         let output = std::env::temp_dir().join("qrd-cli-convert-output-json.qrd");
         fs::write(&input, b"data").expect("should write input");
 
-        let result = convert_placeholder("json", &input, &output);
+        let result = convert_file("json", &input, &output);
         assert!(result.is_ok());
         assert!(output.exists());
         let _ = fs::remove_file(&input);
@@ -266,7 +266,7 @@ mod extended_cli_tests {
         let output = std::env::temp_dir().join("qrd-cli-convert-output-parquet.qrd");
         fs::write(&input, b"data").expect("should write input");
 
-        let result = convert_placeholder("parquet", &input, &output);
+        let result = convert_file("parquet", &input, &output);
         assert!(result.is_ok());
         assert!(output.exists());
         let _ = fs::remove_file(&input);
@@ -277,7 +277,7 @@ mod extended_cli_tests {
     fn convert_nonexistent_input_fails() {
         let input = std::env::temp_dir().join("qrd-cli-convert-nonexistent-input.csv");
         let output = std::env::temp_dir().join("qrd-cli-convert-nonexistent-output.qrd");
-        let result = convert_placeholder("csv", &input, &output);
+        let result = convert_file("csv", &input, &output);
         assert!(result.is_err());
     }
 
@@ -287,9 +287,9 @@ mod extended_cli_tests {
         let output = std::env::temp_dir().join("qrd-cli-convert-test-output.qrd");
         fs::write(&input, b"test").expect("should write input");
 
-        convert_placeholder("csv", &input, &output).expect("convert should work");
-        let content = fs::read_to_string(&output).expect("should read output");
-        assert!(content.contains("qrd-convert-placeholder:csv"));
+        convert_file("csv", &input, &output).expect("convert should work");
+        let content = fs::read(&output).expect("should read output");
+        assert!(content.starts_with(b"QRD\0"));
         let _ = fs::remove_file(&input);
         let _ = fs::remove_file(&output);
     }
@@ -298,7 +298,7 @@ mod extended_cli_tests {
 
     #[test]
     fn keygen_master_key() {
-        let result = keygen_placeholder("master");
+        let result = generate_key("master");
         assert!(result.is_ok());
         let output = result.unwrap();
         assert!(output.contains("MASTER_KEY_HEX="));
@@ -306,7 +306,7 @@ mod extended_cli_tests {
 
     #[test]
     fn keygen_master_key_hex_format() {
-        let output = keygen_placeholder("master").expect("keygen should work");
+        let output = generate_key("master").expect("keygen should work");
         let parts: Vec<&str> = output.split('=').collect();
         assert_eq!(parts.len(), 2);
         assert!(parts[1].len() > 0);
@@ -314,7 +314,7 @@ mod extended_cli_tests {
 
     #[test]
     fn keygen_master_key_length() {
-        let output = keygen_placeholder("master").expect("keygen should work");
+        let output = generate_key("master").expect("keygen should work");
         // Extract hex string (should be 64 chars for 32 bytes)
         let hex_part = output.split('=').nth(1).unwrap();
         assert_eq!(hex_part.len(), 64);
@@ -322,15 +322,15 @@ mod extended_cli_tests {
 
     #[test]
     fn keygen_master_key_unique() {
-        let key1 = keygen_placeholder("master").expect("keygen should work");
-        let key2 = keygen_placeholder("master").expect("keygen should work");
+        let key1 = generate_key("master").expect("keygen should work");
+        let key2 = generate_key("master").expect("keygen should work");
         // Keys should be different due to randomness
         assert_ne!(key1, key2);
     }
 
     #[test]
     fn keygen_signing_key() {
-        let result = keygen_placeholder("signing");
+        let result = generate_key("signing");
         assert!(result.is_ok());
         let output = result.unwrap();
         assert!(output.contains("ED25519_PRIVATE_KEY"));
@@ -339,26 +339,26 @@ mod extended_cli_tests {
 
     #[test]
     fn keygen_signing_key_format() {
-        let output = keygen_placeholder("signing").expect("keygen should work");
+        let output = generate_key("signing").expect("keygen should work");
         assert!(output.contains("="));
     }
 
     #[test]
     fn keygen_invalid_mode_fails() {
-        let result = keygen_placeholder("invalid");
+        let result = generate_key("invalid");
         assert!(result.is_err());
     }
 
     #[test]
     fn keygen_empty_mode_fails() {
-        let result = keygen_placeholder("");
+        let result = generate_key("");
         assert!(result.is_err());
     }
 
     #[test]
     fn keygen_multiple_calls_unique() {
         let keys: Vec<_> = (0..5)
-            .map(|_| keygen_placeholder("master").expect("keygen should work"))
+            .map(|_| generate_key("master").expect("keygen should work"))
             .collect();
 
         // All should be unique
@@ -440,13 +440,13 @@ mod extended_cli_tests {
         let inspect = inspect_file(&path).expect("inspect should work");
         assert!(inspect.contains("format_major"));
 
-        let keygen_result = keygen_placeholder("master").expect("keygen should work");
+        let keygen_result = generate_key("master").expect("keygen should work");
         assert!(keygen_result.contains("MASTER_KEY_HEX"));
 
         let input = std::env::temp_dir().join("qrd-cli-workflow-input.csv");
         let output = std::env::temp_dir().join("qrd-cli-workflow-output.qrd");
         fs::write(&input, b"test").expect("should write");
-        convert_placeholder("csv", &input, &output).expect("convert should work");
+        convert_file("csv", &input, &output).expect("convert should work");
         assert!(output.exists());
 
         let _ = fs::remove_file(&path);

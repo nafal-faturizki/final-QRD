@@ -72,6 +72,48 @@ int32_t qrd_parse_footer_length(
 /// Returns QRD_OK if footer is valid, error code otherwise.
 int32_t qrd_parse_footer(const uint8_t *bytes_ptr, size_t bytes_len);
 
+/// Opens a QRD reader for a complete file image.
+/// The returned handle must be closed with qrd_reader_close.
+int32_t qrd_reader_open(
+    const uint8_t *bytes_ptr,
+    size_t bytes_len,
+    QrdReaderHandle *out_handle
+);
+
+/// Closes a QRD reader handle.
+void qrd_reader_close(QrdReaderHandle *handle);
+
+/// Verifies data integrity for an open QRD reader.
+int32_t qrd_reader_verify_integrity(const QrdReaderHandle *handle);
+
+/// Returns the total row count from an open QRD reader.
+int32_t qrd_reader_row_count(const QrdReaderHandle *handle, size_t *out_row_count);
+
+/// Parses the file header from an open QRD reader.
+int32_t qrd_reader_inspect_header(
+    const QrdReaderHandle *handle,
+    QrdHeaderC *out_header
+);
+
+/// Creates a streaming writer from a serialized schema payload.
+/// The returned handle must be closed with qrd_writer_close.
+int32_t qrd_writer_new(
+    const uint8_t *schema_bytes_ptr,
+    size_t schema_bytes_len,
+    QrdWriterHandle *out_handle
+);
+
+/// Closes a QRD writer handle.
+void qrd_writer_close(QrdWriterHandle *handle);
+
+/// Finalizes a QRD writer and writes the file image to the provided buffer.
+int32_t qrd_writer_finish(
+    QrdWriterHandle *handle,
+    uint8_t *out_bytes,
+    size_t out_capacity,
+    size_t *out_len
+);
+
 // ============================================================================
 // COMPRESSION
 // ============================================================================

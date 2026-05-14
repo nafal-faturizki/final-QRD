@@ -2,9 +2,11 @@ use qrd_core::compression::{compress, decompress, CompressionKind};
 use qrd_core::encryption::{derive_column_key, EncryptionConfig};
 use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileHeader};
 use qrd_core::reader::FileReader;
+use qrd_core::schema::Schema;
 use qrd_core::writer::StreamingWriter;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::ptr;
 
 /// Canonical C ABI representation of the QRD file header.
 #[repr(C)]
@@ -145,6 +147,180 @@ pub extern "C" fn qrd_parse_footer(bytes_ptr: *const u8, bytes_len: usize) -> i3
     match parse_footer(bytes) {
         Ok(_) => QRD_OK,
         Err(_) => QRD_INVALID_FORMAT,
+    }
+}
+
+/// Opens a QRD reader for a complete file image.
+#[no_mangle]
+pub extern "C" fn qrd_reader_open(
+    bytes_ptr: *const u8,
+    bytes_len: usize,
+    out_handle: *mut QrdReaderHandle,
+) -> i32 {
+    if bytes_ptr.is_null() || out_handle.is_null() {
+        return QRD_INVALID_ARGUMENT;
+    }
+
+    let bytes = unsafe { std::slice::from_raw_parts(bytes_ptr, bytes_len) };
+    match FileReader::open(bytes) {
+        Ok(reader) => {
+            let boxed = Box::into_raw(Box::new(reader));
+            unsafe {
+                *out_handle = QrdReaderHandle { inner: boxed };
+            }
+            QRD_OK
+        }
+        Err(_) => QRD_INVALID_FORMAT,
+    }
+}
+
+/// Closes a QRD reader handle.
+#[no_mangle]
+pub extern "C" fn qrd_reader_close(handle: *mut QrdReaderHandle) {
+    if handle.is_null() {
+        return;
+    }
+
+    let reader_ptr = unsafe { (*handle).inner };
+    if reader_ptr.is_null() {
+        return;
+    }
+
+    unsafe {
+        let _ = Box::from_raw(reader_ptr);
+        (*handle).inner = ptr::null_mut();
+    }
+}
+
+/// Verifies integrity for an open QRD reader.
+#[no_mangle]
+pub extern "C" fn qrd_reader_verify_integrity(handle: *const QrdReaderHandle) -> i32 {
+    if handle.is_null() {
+        return QRD_INVALID_ARGUMENT;
+    }
+
+    let reader = unsafe { &*((*handle).inner) };
+    match reader.verify_integrity() {
+        Ok(_) => QRD_OK,
+        Err(_) => QRD_INVALID_FORMAT,
+    }
+}
+
+/// Returns the total row count for an open QRD reader.
+#[no_mangle]
+pub extern "C" fn qrd_reader_row_count(
+    handle: *const QrdReaderHandle,
+    out_row_count: *mut usize,
+) -> i32 {
+    if handle.is_null() || out_row_count.is_null() {
+        return QRD_INVALID_ARGUMENT;
+    }
+
+    let reader = unsafe { &*((*handle).inner) };
+    unsafe {
+        *out_row_count = reader.row_count();
+    }
+    QRD_OK
+}
+
+/// Inspects the file header from an open QRD reader.
+#[no_mangle]
+pub extern "C" fn qrd_reader_inspect_header(
+    handle: *const QrdReaderHandle,
+    out_header: *mut QrdHeaderC,
+) -> i32 {
+    if handle.is_null() || out_header.is_null() {
+        return QRD_INVALID_ARGUMENT;
+    }
+
+    let reader = unsafe { &*((*handle).inner) };
+    let header = reader.header();
+    unsafe {
+        *out_header = header.clone().into();
+    }
+    QRD_OK
+}
+
+/// Creates a new streaming writer from serialized schema bytes.
+#[no_mangle]
+pub extern "C" fn qrd_writer_new(
+    schema_bytes_ptr: *const u8,
+    schema_bytes_len: usize,
+    out_handle: *mut QrdWriterHandle,
+) -> i32 {
+    if schema_bytes_ptr.is_null() || out_handle.is_null() {
+        return QRD_INVALID_ARGUMENT;
+    }
+
+    let schema_bytes = unsafe { std::slice::from_raw_parts(schema_bytes_ptr, schema_bytes_len) };
+    match Schema::deserialize(schema_bytes) {
+        Ok(schema) => {
+            let writer = StreamingWriter::new(schema);
+            let boxed = Box::into_raw(Box::new(writer));
+            unsafe {
+                *out_handle = QrdWriterHandle { inner: boxed };
+            }
+            QRD_OK
+        }
+        Err(_) => QRD_INVALID_FORMAT,
+    }
+}
+
+/// Closes a QRD writer handle.
+#[no_mangle]
+pub extern "C" fn qrd_writer_close(handle: *mut QrdWriterHandle) {
+    if handle.is_null() {
+        return;
+    }
+
+    let writer_ptr = unsafe { (*handle).inner };
+    if writer_ptr.is_null() {
+        return;
+    }
+
+    unsafe {
+        let _ = Box::from_raw(writer_ptr);
+        (*handle).inner = ptr::null_mut();
+    }
+}
+
+/// Finalizes a writer and writes the resulting file image.
+#[no_mangle]
+pub extern "C" fn qrd_writer_finish(
+    handle: *mut QrdWriterHandle,
+    out_bytes: *mut u8,
+    out_capacity: usize,
+    out_len: *mut usize,
+) -> i32 {
+    if handle.is_null() || out_bytes.is_null() || out_len.is_null() {
+        return QRD_INVALID_ARGUMENT;
+    }
+
+    let writer_ptr = unsafe { (*handle).inner };
+    if writer_ptr.is_null() {
+        return QRD_INVALID_ARGUMENT;
+    }
+
+    let boxed = unsafe { Box::from_raw(writer_ptr) };
+    match boxed.finish() {
+        Ok(bytes) => {
+            if bytes.len() > out_capacity {
+                let _ = Box::into_raw(boxed);
+                return QRD_INVALID_ARGUMENT;
+            }
+            unsafe {
+                std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_bytes, bytes.len());
+                *out_len = bytes.len();
+                (*handle).inner = ptr::null_mut();
+            }
+            QRD_OK
+        }
+        Err(_) => {
+            unsafe {
+                (*handle).inner = Box::into_raw(boxed);
+            }
+            QRD_INVALID_FORMAT
+        }
     }
 }
 

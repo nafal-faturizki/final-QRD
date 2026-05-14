@@ -85,31 +85,50 @@ impl FileHeader {
 }
 
 /// Parses a canonical QRD header.
+fn read_u16_le(bytes: &[u8], offset: usize) -> Result<u16> {
+    let slice = bytes
+        .get(offset..offset + 2)
+        .ok_or(QrdError::InvalidHeaderLength)?;
+    Ok(u16::from_le_bytes([slice[0], slice[1]]))
+}
+
+fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32> {
+    let slice = bytes
+        .get(offset..offset + 4)
+        .ok_or(QrdError::InvalidFooterLength)?;
+    Ok(u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]))
+}
+
 pub fn parse_header(bytes: &[u8]) -> Result<FileHeader> {
     if bytes.len() != HEADER_SIZE {
         return Err(QrdError::InvalidHeaderLength);
     }
-    if bytes[0..4] != MAGIC_BYTES {
+    if bytes.get(0..4) != Some(&MAGIC_BYTES) {
         return Err(QrdError::InvalidMagic);
     }
 
-    let mut reserved = [0u8; 2];
-    reserved.copy_from_slice(&bytes[18..20]);
-    if u16::from_le_bytes(reserved) != 0 {
+    let reserved = read_u16_le(bytes, 18)?;
+    if reserved != 0 {
         return Err(QrdError::InvalidReservedField);
     }
 
-    let mut schema_id = [0u8; 8];
-    schema_id.copy_from_slice(&bytes[8..16]);
+    let schema_id = bytes
+        .get(8..16)
+        .ok_or(QrdError::InvalidHeaderLength)?
+        .try_into()
+        .expect("slice has fixed length");
 
-    let mut writer_version = [0u8; 12];
-    writer_version.copy_from_slice(&bytes[20..32]);
+    let writer_version = bytes
+        .get(20..32)
+        .ok_or(QrdError::InvalidHeaderLength)?
+        .try_into()
+        .expect("slice has fixed length");
 
     Ok(FileHeader {
-        format_major: u16::from_le_bytes([bytes[4], bytes[5]]),
-        format_minor: u16::from_le_bytes([bytes[6], bytes[7]]),
+        format_major: read_u16_le(bytes, 4)?,
+        format_minor: read_u16_le(bytes, 6)?,
         schema_id,
-        flags: u16::from_le_bytes([bytes[16], bytes[17]]),
+        flags: read_u16_le(bytes, 16)?,
         writer_version,
     })
 }
@@ -119,9 +138,7 @@ pub fn parse_footer_length(bytes: &[u8]) -> Result<u32> {
     if bytes.len() < 4 {
         return Err(QrdError::InvalidFooterLength);
     }
-
-    let tail = &bytes[bytes.len() - 4..];
-    Ok(u32::from_le_bytes([tail[0], tail[1], tail[2], tail[3]]))
+    read_u32_le(bytes, bytes.len() - 4)
 }
 
 /// Appends a footer-length field in canonical little-endian form.
@@ -198,15 +215,7 @@ pub fn parse_footer(bytes: &[u8]) -> Result<FileFooter> {
     let schema = Schema::deserialize(schema_bytes)?;
     cursor = schema_end;
 
-    let row_group_count_bytes = bytes
-        .get(cursor..cursor + 4)
-        .ok_or(QrdError::UnexpectedEof)?;
-    let row_group_count = u32::from_le_bytes([
-        row_group_count_bytes[0],
-        row_group_count_bytes[1],
-        row_group_count_bytes[2],
-        row_group_count_bytes[3],
-    ]);
+    let row_group_count = read_u32_le(bytes, cursor)?;
     cursor += 4;
 
     if cursor != checksum_offset {

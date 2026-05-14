@@ -1,137 +1,221 @@
 use qrd_core::compression::{compress, decompress, CompressionKind};
-use qrd_core::encryption::{decrypt_payload, derive_column_key, encrypt_payload, EncryptionConfig};
-use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileFooter, FileHeader};
+use qrd_core::encryption::{decrypt_payload, derive_column_key, encrypt_payload, AuthTag, EncryptionConfig, Nonce};
+use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileHeader};
+use wasm_bindgen::prelude::*;
 
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
+#[wasm_bindgen]
+pub struct HeaderInfo {
+    format_major: u16,
+    format_minor: u16,
+    schema_id: Vec<u8>,
+    flags: u16,
+    writer_version: Vec<u8>,
+}
 
-/// Initializes the WASM layer. Must be called before other operations.
+#[wasm_bindgen]
+impl HeaderInfo {
+    #[wasm_bindgen(getter)]
+    pub fn format_major(&self) -> u16 {
+        self.format_major
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn format_minor(&self) -> u16 {
+        self.format_minor
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn schema_id(&self) -> Vec<u8> {
+        self.schema_id.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn flags(&self) -> u16 {
+        self.flags
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn writer_version(&self) -> Vec<u8> {
+        self.writer_version.clone()
+    }
+}
+
+#[wasm_bindgen]
+pub struct EncryptedChunk {
+    nonce: Vec<u8>,
+    auth_tag: Vec<u8>,
+    ciphertext: Vec<u8>,
+}
+
+#[wasm_bindgen]
+impl EncryptedChunk {
+    #[wasm_bindgen(getter)]
+    pub fn nonce(&self) -> Vec<u8> {
+        self.nonce.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn auth_tag(&self) -> Vec<u8> {
+        self.auth_tag.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn ciphertext(&self) -> Vec<u8> {
+        self.ciphertext.clone()
+    }
+}
+
+#[wasm_bindgen]
 pub fn init_wasm() -> bool {
     true
 }
 
-// ============================================================================
-// HEADER/FOOTER INSPECTION
-// ============================================================================
-
-/// Inspects a raw header buffer without mutating it.
-pub fn inspect_header(bytes: &[u8]) -> Option<FileHeader> {
-    parse_header(bytes).ok()
+#[wasm_bindgen]
+pub fn inspect_header(bytes: &[u8]) -> Result<HeaderInfo, JsValue> {
+    parse_header(bytes)
+        .map(|header| HeaderInfo {
+            format_major: header.format_major,
+            format_minor: header.format_minor,
+            schema_id: header.schema_id.to_vec(),
+            flags: header.flags,
+            writer_version: header.writer_version.to_vec(),
+        })
+        .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
-/// Inspects a raw footer-length trailer without touching payload bytes.
-pub fn inspect_footer_length(bytes: &[u8]) -> Option<u32> {
-    parse_footer_length(bytes).ok()
+#[wasm_bindgen]
+pub fn inspect_footer_length(bytes: &[u8]) -> Result<u32, JsValue> {
+    parse_footer_length(bytes).map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
-/// Inspects a canonical footer without touching payload bytes.
-pub fn inspect_footer_bytes(bytes: &[u8]) -> Option<FileFooter> {
-    parse_footer(bytes).ok()
+#[wasm_bindgen]
+pub fn inspect_footer_bytes(bytes: &[u8]) -> Result<u32, JsValue> {
+    parse_footer(bytes)
+        .map(|footer| footer.row_group_count)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
-/// Serializes a header to canonical bytes.
+#[wasm_bindgen]
 pub fn serialize_header(
     format_major: u16,
     format_minor: u16,
-    schema_id: &[u8; 8],
+    schema_id: &[u8],
     flags: u16,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, JsValue> {
+    if schema_id.len() != 8 {
+        return Err(JsValue::from_str("schema_id must be 8 bytes"));
+    }
+
+    let mut schema_id_array = [0u8; 8];
+    schema_id_array.copy_from_slice(schema_id);
+
     let header = FileHeader::new(
         format_major,
         format_minor,
-        *schema_id,
+        schema_id_array,
         flags,
         *b"qrd-0.1.0\0\0\0",
     );
-    header.serialize().to_vec()
+    Ok(header.serialize().to_vec())
 }
 
-// ============================================================================
-// COMPRESSION
-// ============================================================================
-
-/// Compresses a payload using Zstandard.
-pub fn compress_zstd(payload: &[u8]) -> Result<Vec<u8>, String> {
-    compress(payload, CompressionKind::Zstd).map_err(|e| format!("ZSTD compression failed: {}", e))
+#[wasm_bindgen]
+pub fn compress_zstd(payload: &[u8]) -> Result<Vec<u8>, JsValue> {
+    compress(payload, CompressionKind::Zstd)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
-/// Decompresses a Zstandard-compressed payload.
-pub fn decompress_zstd(payload: &[u8]) -> Result<Vec<u8>, String> {
+#[wasm_bindgen]
+pub fn decompress_zstd(payload: &[u8]) -> Result<Vec<u8>, JsValue> {
     decompress(payload, CompressionKind::Zstd)
-        .map_err(|e| format!("ZSTD decompression failed: {}", e))
+        .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
-/// Compresses a payload using LZ4.
-pub fn compress_lz4(payload: &[u8]) -> Result<Vec<u8>, String> {
-    compress(payload, CompressionKind::Lz4).map_err(|e| format!("LZ4 compression failed: {}", e))
+#[wasm_bindgen]
+pub fn compress_lz4(payload: &[u8]) -> Result<Vec<u8>, JsValue> {
+    compress(payload, CompressionKind::Lz4)
+        .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
-/// Decompresses an LZ4-compressed payload.
-pub fn decompress_lz4(payload: &[u8]) -> Result<Vec<u8>, String> {
+#[wasm_bindgen]
+pub fn decompress_lz4(payload: &[u8]) -> Result<Vec<u8>, JsValue> {
     decompress(payload, CompressionKind::Lz4)
-        .map_err(|e| format!("LZ4 decompression failed: {}", e))
+        .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
-// ============================================================================
-// ENCRYPTION (AES-256-GCM + HKDF-SHA256)
-// ============================================================================
-
-/// Derives a 32-byte column key using HKDF-SHA256.
+#[wasm_bindgen]
 pub fn derive_key(
     master_key: &[u8],
     column_name: &str,
-    schema_fingerprint: &[u8; 8],
-) -> Result<Vec<u8>, String> {
+    schema_fingerprint: &[u8],
+) -> Result<Vec<u8>, JsValue> {
+    if schema_fingerprint.len() != 8 {
+        return Err(JsValue::from_str("schema_fingerprint must be 8 bytes"));
+    }
+    let mut fingerprint = [0u8; 8];
+    fingerprint.copy_from_slice(schema_fingerprint);
+
     let config = EncryptionConfig {
         column_name: column_name.to_string(),
-        schema_fingerprint: *schema_fingerprint,
+        schema_fingerprint: fingerprint,
     };
 
     derive_column_key(master_key, &config)
         .map(|key| key.to_vec())
-        .map_err(|e| format!("Key derivation failed: {}", e))
+        .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
-/// Encrypts a payload using AES-256-GCM.
-/// Returns (nonce, auth_tag, ciphertext) on success.
-pub fn encrypt(payload: &[u8], key: &[u8; 32]) -> Result<EncryptedChunk, String> {
-    encrypt_payload(payload, key)
+#[wasm_bindgen]
+pub fn encrypt(
+    payload: &[u8],
+    key: &[u8],
+) -> Result<EncryptedChunk, JsValue> {
+    if key.len() != 32 {
+        return Err(JsValue::from_str("key must be 32 bytes"));
+    }
+    let mut key_array = [0u8; 32];
+    key_array.copy_from_slice(key);
+
+    encrypt_payload(payload, &key_array)
         .map(|chunk| EncryptedChunk {
             nonce: chunk.nonce.0.to_vec(),
             auth_tag: chunk.auth_tag.0.to_vec(),
             ciphertext: chunk.ciphertext,
         })
-        .map_err(|e| format!("Encryption failed: {}", e))
+        .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
-/// Decrypts a payload using AES-256-GCM.
+#[wasm_bindgen]
 pub fn decrypt(
     ciphertext: &[u8],
-    key: &[u8; 32],
-    nonce: &[u8; 12],
-    auth_tag: &[u8; 16],
-) -> Result<Vec<u8>, String> {
-    use qrd_core::encryption::AuthTag as QrdAuthTag;
-    use qrd_core::encryption::Nonce as QrdNonce;
+    key: &[u8],
+    nonce: &[u8],
+    auth_tag: &[u8],
+) -> Result<Vec<u8>, JsValue> {
+    if key.len() != 32 {
+        return Err(JsValue::from_str("key must be 32 bytes"));
+    }
+    if nonce.len() != 12 {
+        return Err(JsValue::from_str("nonce must be 12 bytes"));
+    }
+    if auth_tag.len() != 16 {
+        return Err(JsValue::from_str("auth_tag must be 16 bytes"));
+    }
 
-    let nonce_wrapper = QrdNonce(*nonce);
-    let auth_tag_wrapper = QrdAuthTag(*auth_tag);
+    let mut key_array = [0u8; 32];
+    key_array.copy_from_slice(key);
+    let mut nonce_array = [0u8; 12];
+    nonce_array.copy_from_slice(nonce);
+    let mut auth_tag_array = [0u8; 16];
+    auth_tag_array.copy_from_slice(auth_tag);
 
-    decrypt_payload(ciphertext, key, &nonce_wrapper, &auth_tag_wrapper)
-        .map_err(|e| format!("Decryption failed: {}", e))
-}
-
-// ============================================================================
-// DATA STRUCTURES FOR WASM
-// ============================================================================
-
-/// Encrypted chunk envelope (used for WASM serialization)
-#[derive(Debug, Clone)]
-pub struct EncryptedChunk {
-    pub nonce: Vec<u8>,
-    pub auth_tag: Vec<u8>,
-    pub ciphertext: Vec<u8>,
+    decrypt_payload(
+        ciphertext,
+        &key_array,
+        &Nonce(nonce_array),
+        &AuthTag(auth_tag_array),
+    )
+    .map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
 #[cfg(test)]
@@ -155,7 +239,8 @@ mod tests {
         let bytes = header.serialize();
 
         let parsed = inspect_header(&bytes).expect("header should parse");
-        assert_eq!(parsed, header);
+        assert_eq!(parsed.format_major(), 1);
+        assert_eq!(parsed.schema_id(), vec![9, 8, 7, 6, 5, 4, 3, 2]);
     }
 
     #[test]
@@ -169,11 +254,11 @@ mod tests {
 
     #[test]
     fn wasm_serialize_header() {
-        let serialized = serialize_header(1, 0, &[1, 2, 3, 4, 5, 6, 7, 8], 0);
+        let serialized = serialize_header(1, 0, &[1, 2, 3, 4, 5, 6, 7, 8], 0).unwrap();
         assert_eq!(serialized.len(), qrd_core::parser::HEADER_SIZE);
-        assert_eq!(serialized[0], 0x51); // 'Q'
-        assert_eq!(serialized[1], 0x52); // 'R'
-        assert_eq!(serialized[2], 0x44); // 'D'
+        assert_eq!(serialized[0], 0x51);
+        assert_eq!(serialized[1], 0x52);
+        assert_eq!(serialized[2], 0x44);
     }
 
     #[test]
@@ -190,21 +275,19 @@ mod tests {
         let key = derive_key(master_key, "test_col", &[1, 2, 3, 4, 5, 6, 7, 8])
             .expect("key derivation should work");
 
-        // Convert to array
         let mut key_array = [0u8; 32];
         key_array.copy_from_slice(&key);
 
         let plaintext = b"sensitive data";
         let encrypted = encrypt(plaintext, &key_array).expect("encryption should work");
 
-        // Convert back from Vec to array
         let mut nonce_array = [0u8; 12];
-        nonce_array.copy_from_slice(&encrypted.nonce);
+        nonce_array.copy_from_slice(&encrypted.nonce());
         let mut auth_tag_array = [0u8; 16];
-        auth_tag_array.copy_from_slice(&encrypted.auth_tag);
+        auth_tag_array.copy_from_slice(&encrypted.auth_tag());
 
         let decrypted = decrypt(
-            &encrypted.ciphertext,
+            &encrypted.ciphertext(),
             &key_array,
             &nonce_array,
             &auth_tag_array,

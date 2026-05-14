@@ -835,6 +835,7 @@ version = "0.1.0"
 dependencies = [
  "qrd-core",
  "rand 0.8.6",
+ "serde_json",
 ]
 
 [[package]]
@@ -867,6 +868,7 @@ name = "qrd-wasm"
 version = "0.1.0"
 dependencies = [
  "qrd-core",
+ "wasm-bindgen",
 ]
 
 [[package]]
