@@ -118,5 +118,7 @@ flamegraph.svg
 
 # CI/CD
 .github/workflows/
+!.github/workflows/
+!.github/workflows/**
 .gitlab-ci.yml
 .travis.yml
