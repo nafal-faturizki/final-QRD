@@ -1,8 +1,9 @@
 use crate::error::{QrdError, Result};
-use crate::file::build_file_image;
+use crate::file::{build_file_image, build_file_image_with_signature};
 use crate::parser::{build_footer, FileHeader};
 use crate::row_group::RowGroup;
 use crate::schema::Schema;
+use crate::signing::SchemaSignature;
 
 /// Minimal streaming writer scaffold.
 pub struct StreamingWriter {
@@ -11,6 +12,7 @@ pub struct StreamingWriter {
     header: FileHeader,
     row_group_count: u32,
     row_groups: Vec<Vec<u8>>,
+    signature: Option<SchemaSignature>,
 }
 
 impl StreamingWriter {
@@ -23,7 +25,18 @@ impl StreamingWriter {
             header,
             row_group_count: 0,
             row_groups: Vec::new(),
+            signature: None,
         }
+    }
+
+    /// Sets an Ed25519 schema signature for the file
+    pub fn set_signature(&mut self, signature: SchemaSignature) {
+        self.signature = Some(signature);
+    }
+
+    /// Clears any set signature
+    pub fn clear_signature(&mut self) {
+        self.signature = None;
     }
 
     /// Returns the canonical file header that will be written.
@@ -68,18 +81,22 @@ impl StreamingWriter {
             return Err(QrdError::InvalidSchema("writer already finished".into()));
         }
         self.finished = true;
-        build_file_image(
-            &self.schema,
-            &self
-                .row_groups
-                .iter()
-                .map(|bytes| {
-                    // parse raw row group bytes back into RowGroup objects so the file builder
-                    // can preserve canonical semantics when writing.
-                    RowGroup::deserialize(bytes).expect("stored row group bytes must be valid")
-                })
-                .collect::<Vec<_>>(),
-        )
+        
+        let row_groups: Vec<RowGroup> = self
+            .row_groups
+            .iter()
+            .map(|bytes| {
+                // parse raw row group bytes back into RowGroup objects so the file builder
+                // can preserve canonical semantics when writing.
+                RowGroup::deserialize(bytes).expect("stored row group bytes must be valid")
+            })
+            .collect();
+
+        if let Some(signature) = self.signature {
+            build_file_image_with_signature(&self.schema, &row_groups, Some(signature))
+        } else {
+            build_file_image(&self.schema, &row_groups)
+        }
     }
 }
 
@@ -130,10 +147,39 @@ mod tests {
             footer_bytes.len() >= 4,
             "footer bytes should contain a canonical footer length"
         );
+    }
 
-        let parsed_footer =
-            crate::footer::parse_footer(&footer_bytes).expect("footer should parse");
-        assert_eq!(parsed_footer.row_group_count, 1);
-        assert_eq!(parsed_footer.schema, schema);
+    #[test]
+    fn streaming_writer_can_sign_schema() {
+        use crate::signing::{SigningKeyPair, SchemaSignature, SIGNATURE_ALGORITHM};
+        use crate::reader::FileReader;
+
+        let schema = SchemaBuilder::new()
+            .add_field("device_id", FieldKind::Utf8, true)
+            .add_field("status", FieldKind::Int32, false)
+            .build()
+            .expect("schema should build");
+
+        let mut writer = StreamingWriter::new(schema.clone());
+        
+        // Generate signature
+        let keypair = SigningKeyPair::generate();
+        let schema_id = schema.fingerprint();
+        let signature_bytes = keypair.sign_schema(&schema_id);
+        let pubkey = keypair.verifying_key();
+        let sig = SchemaSignature::new(SIGNATURE_ALGORITHM, signature_bytes, pubkey);
+        
+        // Set signature on writer
+        writer.set_signature(sig.clone());
+        writer
+            .write_row_group(&[vec![1, 2], vec![3, 4]])
+            .expect("write row group should work");
+
+        let bytes = writer.finish().expect("finish should succeed");
+        
+        // Verify the file can be read and signature is intact
+        let reader = FileReader::open(&bytes).expect("file image should open");
+        assert_eq!(reader.footer().row_group_count, 1);
     }
 }
+

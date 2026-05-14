@@ -16,6 +16,7 @@ pub mod parser;
 pub mod reader;
 pub mod row_group;
 pub mod schema;
+pub mod signing;
 pub mod writer;
 
 pub use error::{QrdError, Result};

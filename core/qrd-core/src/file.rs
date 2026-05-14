@@ -5,6 +5,7 @@ use crate::parser::{
 };
 use crate::row_group::RowGroup;
 use crate::schema::Schema;
+use crate::signing::SchemaSignature;
 use std::convert::TryFrom;
 
 /// A fully parsed QRD file image.
@@ -13,11 +14,25 @@ pub struct ParsedFile {
     pub header: FileHeader,
     pub row_groups: Vec<RowGroup>,
     pub footer: FileFooter,
+    pub signature: Option<SchemaSignature>,
 }
 
-/// Builds a full QRD file image from schema and row groups.
+/// Builds a full QRD file image from schema and row groups with optional signature.
 pub fn build_file_image(schema: &Schema, row_groups: &[RowGroup]) -> Result<Vec<u8>> {
-    let header = FileHeader::new(1, 0, schema.fingerprint(), 0, *b"qrd-0.1.0\0\0\0");
+    build_file_image_with_signature(schema, row_groups, None)
+}
+
+/// Builds a full QRD file image with optional schema signature.
+pub fn build_file_image_with_signature(
+    schema: &Schema,
+    row_groups: &[RowGroup],
+    signature: Option<SchemaSignature>,
+) -> Result<Vec<u8>> {
+    let mut header = FileHeader::new(1, 0, schema.fingerprint(), 0, *b"qrd-0.1.0\0\0\0");
+    if signature.is_some() {
+        header.set_schema_signed(true);
+    }
+
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&header.serialize());
 
@@ -37,6 +52,12 @@ pub fn build_file_image(schema: &Schema, row_groups: &[RowGroup]) -> Result<Vec<
     let footer_length = u32::try_from(footer.len())
         .map_err(|_| QrdError::InvalidSchema("footer too large".into()))?;
     bytes.extend_from_slice(&footer);
+
+    // Add signature if present (before footer length)
+    if let Some(sig) = signature {
+        bytes.extend_from_slice(&sig.serialize());
+    }
+
     append_footer_length(&mut bytes, footer_length);
     Ok(bytes)
 }
@@ -53,12 +74,30 @@ pub fn parse_file_image(bytes: &[u8]) -> Result<ParsedFile> {
         return Err(QrdError::InvalidFooterLength);
     }
 
-    let footer_start = bytes.len() - 4 - footer_length;
+    // Determine if there's a signature before the footer length
+    let signature_size = if header.is_schema_signed() { 97 } else { 0 }; // 1 + 64 + 32
+    let footer_start = bytes.len() - 4 - footer_length - signature_size;
+
     if footer_start < HEADER_SIZE {
         return Err(QrdError::InvalidFooterLength);
     }
 
     let footer = parse_footer(&bytes[footer_start..footer_start + footer_length])?;
+
+    // Parse signature if present
+    let signature = if header.is_schema_signed() {
+        let sig_start = footer_start + footer_length;
+        let sig_bytes = &bytes[sig_start..sig_start + signature_size];
+        Some(SchemaSignature::deserialize(sig_bytes)?)
+    } else {
+        None
+    };
+
+    // Verify signature if present
+    if let Some(ref sig) = signature {
+        sig.verify(&header.schema_id)?;
+    }
+
     let mut row_groups = Vec::new();
     let mut cursor = HEADER_SIZE;
     while cursor < footer_start {
@@ -81,6 +120,7 @@ pub fn parse_file_image(bytes: &[u8]) -> Result<ParsedFile> {
         header,
         row_groups,
         footer,
+        signature,
     })
 }
 
@@ -110,6 +150,32 @@ mod tests {
         assert_eq!(parsed.row_groups, row_groups);
         assert_eq!(parsed.footer.schema, schema);
         assert_eq!(parsed.footer.row_group_count, row_groups.len() as u32);
+        assert!(parsed.signature.is_none());
+    }
+
+    #[test]
+    fn file_image_with_signature_roundtrip() {
+        use crate::signing::{SigningKeyPair, SchemaSignature, SIGNATURE_ALGORITHM};
+
+        let schema = SchemaBuilder::new()
+            .add_field("device_id", FieldKind::Utf8, true)
+            .build()
+            .expect("schema should build");
+
+        let keypair = SigningKeyPair::generate();
+        let schema_id = schema.fingerprint();
+        let signature_bytes = keypair.sign_schema(&schema_id);
+        let pubkey = keypair.verifying_key();
+
+        let sig = SchemaSignature::new(SIGNATURE_ALGORITHM, signature_bytes, pubkey);
+        let row_groups = vec![RowGroup::from_rows(&[vec![1, 2]]).expect("row group should build")];
+
+        let bytes = build_file_image_with_signature(&schema, &row_groups, Some(sig.clone()))
+            .expect("file image should build");
+        let parsed = parse_file_image(&bytes).expect("file image should parse");
+
+        assert!(parsed.header.is_schema_signed());
+        assert_eq!(parsed.signature.unwrap(), sig);
     }
 
     #[test]
@@ -124,6 +190,7 @@ mod tests {
 
         assert!(parsed.row_groups.is_empty());
         assert_eq!(parsed.footer.row_group_count, 0);
+        assert!(parsed.signature.is_none());
     }
 
     #[test]
@@ -138,4 +205,31 @@ mod tests {
 
         assert!(parse_file_image(&bytes).is_err());
     }
+
+    #[test]
+    fn file_image_rejects_invalid_signature() {
+        use crate::signing::{SigningKeyPair, SchemaSignature, SIGNATURE_ALGORITHM};
+
+        let schema = SchemaBuilder::new()
+            .add_field("device_id", FieldKind::Utf8, true)
+            .build()
+            .expect("schema should build");
+
+        let keypair = SigningKeyPair::generate();
+        let schema_id = schema.fingerprint();
+        let mut signature_bytes = keypair.sign_schema(&schema_id);
+        // Tamper with signature
+        signature_bytes[0] ^= 0xFF;
+        let pubkey = keypair.verifying_key();
+
+        let sig = SchemaSignature::new(SIGNATURE_ALGORITHM, signature_bytes, pubkey);
+        let row_groups = vec![RowGroup::from_rows(&[vec![1, 2]]).expect("row group should build")];
+
+        let bytes = build_file_image_with_signature(&schema, &row_groups, Some(sig))
+            .expect("file image should build");
+
+        // Should fail because signature is invalid
+        assert!(parse_file_image(&bytes).is_err());
+    }
 }
+

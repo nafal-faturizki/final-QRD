@@ -20,6 +20,39 @@ pub struct FileHeader {
 }
 
 impl FileHeader {
+    /// Flag: Set if columns are encrypted
+    pub const FLAG_ENCRYPTED: u16 = 0x0001;
+    /// Flag: Set if schema is signed with Ed25519
+    pub const FLAG_SCHEMA_SIGNED: u16 = 0x0002;
+
+    /// Checks if the ENCRYPTED flag is set
+    pub fn is_encrypted(&self) -> bool {
+        (self.flags & Self::FLAG_ENCRYPTED) != 0
+    }
+
+    /// Checks if the SCHEMA_SIGNED flag is set
+    pub fn is_schema_signed(&self) -> bool {
+        (self.flags & Self::FLAG_SCHEMA_SIGNED) != 0
+    }
+
+    /// Sets the ENCRYPTED flag
+    pub fn set_encrypted(&mut self, encrypted: bool) {
+        if encrypted {
+            self.flags |= Self::FLAG_ENCRYPTED;
+        } else {
+            self.flags &= !Self::FLAG_ENCRYPTED;
+        }
+    }
+
+    /// Sets the SCHEMA_SIGNED flag
+    pub fn set_schema_signed(&mut self, signed: bool) {
+        if signed {
+            self.flags |= Self::FLAG_SCHEMA_SIGNED;
+        } else {
+            self.flags &= !Self::FLAG_SCHEMA_SIGNED;
+        }
+    }
+
     /// Serializes the header into its canonical 32-byte layout.
     pub fn serialize(&self) -> [u8; HEADER_SIZE] {
         let mut bytes = [0u8; HEADER_SIZE];
