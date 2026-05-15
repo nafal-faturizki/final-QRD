@@ -16,8 +16,8 @@ mod extended_cli_tests {
             .build()
             .expect("schema should build");
 
-        let row_groups = vec![RowGroup::from_rows(&[vec![1, 2], vec![3, 4]])
-            .expect("row group should build")];
+        let row_groups =
+            vec![RowGroup::from_rows(&[vec![1, 2], vec![3, 4]]).expect("row group should build")];
 
         let bytes = build_file_image(&schema, &row_groups).expect("file image should build");
         let path = std::env::temp_dir().join(format!("qrd-cli-test-{}.qrd", name));

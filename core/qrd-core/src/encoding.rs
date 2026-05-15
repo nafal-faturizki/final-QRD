@@ -134,12 +134,12 @@ fn encode_bit_packed(values: &[u8]) -> Result<Vec<u8>> {
     output[4] = bit_width;
     let payload_offset = 5;
 
-    // Optimize by iterating bit-planes first (better cache locality)
-    // instead of values first with nested bit loop.
-    for bit_plane in 0..usize::from(bit_width) {
-        for (value_idx, value) in values.iter().enumerate() {
-            let bit = (value >> bit_plane) & 1;
-            let bit_position = bit_plane * values.len() + value_idx;
+    // Store bits in value-major order so decode_bit_packed can reconstruct
+    // each value by reading its bit-width slice sequentially.
+    for (value_idx, value) in values.iter().enumerate() {
+        for bit_index in 0..usize::from(bit_width) {
+            let bit = (value >> bit_index) & 1;
+            let bit_position = value_idx * usize::from(bit_width) + bit_index;
             let byte_index = payload_offset + (bit_position >> 3);
             let bit_offset = (bit_position & 7) as u8;
             output[byte_index] |= bit << bit_offset;
@@ -313,7 +313,9 @@ fn encode_dict_rle(values: &[u8]) -> Result<Vec<u8>> {
         let slot = &mut index_map[usize::from(*value)];
         if *slot == u8::MAX {
             let next_index = u8::try_from(dictionary.len()).map_err(|_| {
-                QrdError::InvalidSchema("dictionary encoding supports at most 255 unique values".into())
+                QrdError::InvalidSchema(
+                    "dictionary encoding supports at most 255 unique values".into(),
+                )
             })?;
             dictionary.push(*value);
             *slot = next_index;

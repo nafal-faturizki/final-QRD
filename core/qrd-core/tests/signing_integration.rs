@@ -5,7 +5,7 @@
 mod tests {
     use qrd_core::reader::FileReader;
     use qrd_core::schema::{FieldKind, SchemaBuilder};
-    use qrd_core::signing::{SigningKeypair, SchemaSignature};
+    use qrd_core::signing::{SchemaSignature, SigningKeypair};
     use qrd_core::writer::StreamingWriter;
 
     // Test 1: Sign schema with keypair
@@ -19,12 +19,11 @@ mod tests {
             .expect("should build schema");
 
         let schema_bytes = schema.serialize().expect("should serialize schema");
-        let sig = SchemaSignature::from_keypair(&keypair, &schema_bytes)
-            .expect("should sign schema");
+        let sig =
+            SchemaSignature::from_keypair(&keypair, &schema_bytes).expect("should sign schema");
 
         // Verify signature
-        sig.verify(&schema_bytes)
-            .expect("signature should verify");
+        sig.verify(&schema_bytes).expect("signature should verify");
     }
 
     // Test 2: Verify signature with different keypair should fail
@@ -41,8 +40,7 @@ mod tests {
         let schema_bytes = schema.serialize().expect("should serialize");
 
         // Sign with kp1
-        let sig = SchemaSignature::from_keypair(&kp1, &schema_bytes)
-            .expect("should sign");
+        let sig = SchemaSignature::from_keypair(&kp1, &schema_bytes).expect("should sign");
 
         // Try to verify with kp2's public key (modify signature's public key)
         let mut sig_with_wrong_key = sig.clone();
@@ -62,8 +60,7 @@ mod tests {
             .expect("should build schema");
 
         let schema_bytes = schema.serialize().expect("should serialize");
-        let sig = SchemaSignature::from_keypair(&keypair, &schema_bytes)
-            .expect("should sign");
+        let sig = SchemaSignature::from_keypair(&keypair, &schema_bytes).expect("should sign");
 
         // Tamper with schema
         let mut tampered = schema_bytes.clone();
@@ -89,10 +86,10 @@ mod tests {
 
         let schema_bytes = schema.serialize().expect("should serialize");
 
-        let sig1 = SchemaSignature::from_keypair(&kp1, &schema_bytes)
-            .expect("should sign with kp1");
-        let sig2 = SchemaSignature::from_keypair(&kp2, &schema_bytes)
-            .expect("should sign with kp2");
+        let sig1 =
+            SchemaSignature::from_keypair(&kp1, &schema_bytes).expect("should sign with kp1");
+        let sig2 =
+            SchemaSignature::from_keypair(&kp2, &schema_bytes).expect("should sign with kp2");
 
         // Same seed → same signature
         assert_eq!(sig1.signature, sig2.signature);
@@ -109,15 +106,13 @@ mod tests {
             .expect("should build");
 
         let schema_bytes = schema.serialize().expect("should serialize");
-        let sig = SchemaSignature::from_keypair(&keypair, &schema_bytes)
-            .expect("should sign");
+        let sig = SchemaSignature::from_keypair(&keypair, &schema_bytes).expect("should sign");
 
         // Serialize and deserialize
         let bytes = sig.to_bytes();
         assert_eq!(bytes.len(), 97);
 
-        let deserialized = SchemaSignature::from_bytes(&bytes)
-            .expect("should deserialize");
+        let deserialized = SchemaSignature::from_bytes(&bytes).expect("should deserialize");
 
         // Verify deserialized signature
         deserialized
@@ -149,10 +144,8 @@ mod tests {
         let bytes1 = schema1.serialize().expect("should serialize");
         let bytes2 = schema2.serialize().expect("should serialize");
 
-        let sig1 = SchemaSignature::from_keypair(&keypair, &bytes1)
-            .expect("should sign schema1");
-        let sig2 = SchemaSignature::from_keypair(&keypair, &bytes2)
-            .expect("should sign schema2");
+        let sig1 = SchemaSignature::from_keypair(&keypair, &bytes1).expect("should sign schema1");
+        let sig2 = SchemaSignature::from_keypair(&keypair, &bytes2).expect("should sign schema2");
 
         // Signatures should be different for different schemas
         assert_ne!(sig1.signature, sig2.signature);
@@ -174,10 +167,7 @@ mod tests {
         let mut writer = StreamingWriter::new(schema.clone());
 
         // 2 fields: each row has 2 bytes
-        let rows: Vec<Vec<u8>> = vec![
-            vec![1, 2],
-            vec![3, 4],
-        ];
+        let rows: Vec<Vec<u8>> = vec![vec![1, 2], vec![3, 4]];
 
         writer.write_row_group(&rows).expect("should write rows");
         let file_data = writer.finish().expect("should finish");
@@ -207,8 +197,7 @@ mod tests {
         // Verify with public key
         let vkey = qrd_core::signing::VerificationKey::from_bytes(&pubkey)
             .expect("should create verification key");
-        vkey.verify(message, &sig)
-            .expect("should verify message");
+        vkey.verify(message, &sig).expect("should verify message");
     }
 
     // Test 9: Signature bytes format validation
@@ -246,8 +235,7 @@ mod tests {
             .expect("should build");
 
         let schema_bytes = schema.serialize().expect("should serialize");
-        let sig = SchemaSignature::from_keypair(&keypair, &schema_bytes)
-            .expect("should sign");
+        let sig = SchemaSignature::from_keypair(&keypair, &schema_bytes).expect("should sign");
 
         sig.verify(&schema_bytes)
             .expect("should verify complex schema signature");
@@ -263,14 +251,12 @@ mod tests {
             .expect("should build");
 
         let schema_bytes = schema.serialize().expect("should serialize");
-        let sig = SchemaSignature::from_keypair(&keypair, &schema_bytes)
-            .expect("should sign");
+        let sig = SchemaSignature::from_keypair(&keypair, &schema_bytes).expect("should sign");
 
         // Signature proves that the holder of keypair signed this specific schema
         // (non-repudiation property)
         let pubkey = sig.public_key;
-        sig.verify(&schema_bytes)
-            .expect("signature verifies");
+        sig.verify(&schema_bytes).expect("signature verifies");
 
         // Signature contains public key for independent verification
         assert_eq!(pubkey, keypair.public_key_bytes());
@@ -289,10 +275,8 @@ mod tests {
 
         let schema_bytes = schema.serialize().expect("should serialize");
 
-        let sig1 = SchemaSignature::from_keypair(&kp, &schema_bytes)
-            .expect("should sign");
-        let sig2 = SchemaSignature::from_keypair(&kp, &schema_bytes)
-            .expect("should sign");
+        let sig1 = SchemaSignature::from_keypair(&kp, &schema_bytes).expect("should sign");
+        let sig2 = SchemaSignature::from_keypair(&kp, &schema_bytes).expect("should sign");
 
         // Signatures should be identical (deterministic)
         assert_eq!(sig1.signature, sig2.signature);
@@ -334,8 +318,7 @@ mod tests {
         let schema_bytes = schema.serialize().expect("should serialize");
 
         // Sign with kp1
-        let sig = SchemaSignature::from_keypair(&kp1, &schema_bytes)
-            .expect("should sign");
+        let sig = SchemaSignature::from_keypair(&kp1, &schema_bytes).expect("should sign");
 
         // Swap public key with kp2's
         let mut wrong_sig = sig.clone();
@@ -343,6 +326,9 @@ mod tests {
 
         // Should fail verification
         let result = wrong_sig.verify(&schema_bytes);
-        assert!(result.is_err(), "should reject signature with wrong public key");
+        assert!(
+            result.is_err(),
+            "should reject signature with wrong public key"
+        );
     }
 }

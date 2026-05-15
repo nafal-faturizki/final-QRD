@@ -56,7 +56,8 @@ impl StreamingWriter {
         if self.finished {
             return Err(QrdError::InvalidSchema("writer already finished".into()));
         }
-        let serialized = RowGroup::serialize_plain_from_rows_with_owned_names(rows, &self.column_names)?;
+        let serialized =
+            RowGroup::serialize_plain_from_rows_with_owned_names(rows, &self.column_names)?;
         self.row_group_count = self
             .row_group_count
             .checked_add(1)
@@ -158,8 +159,8 @@ mod tests {
 
     #[test]
     fn streaming_writer_can_sign_schema() {
-        use crate::signing::{SigningKeyPair, SchemaSignature, SIGNATURE_ALGORITHM};
         use crate::reader::FileReader;
+        use crate::signing::{SchemaSignature, SigningKeyPair, SIGNATURE_ALGORITHM};
 
         let schema = SchemaBuilder::new()
             .add_field("device_id", FieldKind::Utf8, true)
@@ -168,14 +169,14 @@ mod tests {
             .expect("schema should build");
 
         let mut writer = StreamingWriter::new(schema.clone());
-        
+
         // Generate signature
         let keypair = SigningKeyPair::generate();
         let schema_id = schema.fingerprint();
         let signature_bytes = keypair.sign_schema(&schema_id);
         let pubkey = keypair.verifying_key();
         let sig = SchemaSignature::new(SIGNATURE_ALGORITHM, signature_bytes, pubkey);
-        
+
         // Set signature on writer
         writer.set_signature(sig.clone());
         writer
@@ -183,10 +184,9 @@ mod tests {
             .expect("write row group should work");
 
         let bytes = writer.finish().expect("finish should succeed");
-        
+
         // Verify the file can be read and signature is intact
         let reader = FileReader::open(&bytes).expect("file image should open");
         assert_eq!(reader.footer().row_group_count, 1);
     }
 }
-

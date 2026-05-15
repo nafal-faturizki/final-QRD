@@ -1,15 +1,20 @@
 use qrd_core::compression::{choose_compression, compress, decompress, CompressionKind};
 use qrd_core::ecc::{encode, recover_missing_chunk, verify, ReedSolomonConfig};
 use qrd_core::encoding::{decode, encode as encode_values, EncodingId};
-use qrd_core::encryption::{decrypt_payload, derive_column_key, encrypt_payload, AuthTag, EncryptionConfig, Nonce};
+use qrd_core::encryption::{
+    decrypt_payload, derive_column_key, encrypt_payload, AuthTag, EncryptionConfig, Nonce,
+};
+use qrd_core::error::QrdError;
 use qrd_core::file::{build_file_image, build_file_image_with_signature, parse_file_image};
-use qrd_core::parser::{append_footer_length, build_footer, parse_footer, parse_footer_length, parse_header, FileHeader, HEADER_SIZE};
+use qrd_core::integrity::{crc32, verify_crc32};
+use qrd_core::parser::{
+    append_footer_length, build_footer, parse_footer, parse_footer_length, parse_header,
+    FileHeader, HEADER_SIZE,
+};
 use qrd_core::reader::FileReader;
 use qrd_core::row_group::RowGroup;
 use qrd_core::schema::{FieldKind, SchemaBuilder};
-use qrd_core::signing::{SchemaSignature, SIGNATURE_ALGORITHM, SigningKeyPair, VerifyingKeyPair};
-use qrd_core::integrity::{crc32, verify_crc32};
-use qrd_core::error::QrdError;
+use qrd_core::signing::{SchemaSignature, SigningKeyPair, VerifyingKeyPair, SIGNATURE_ALGORITHM};
 
 // -----------------------------------------------------------------------------
 // Parser Tests
@@ -50,18 +55,27 @@ fn parse_header_accepts_valid_header() {
 fn append_and_parse_footer_length_are_inverse() {
     let mut buffer = Vec::new();
     append_footer_length(&mut buffer, 0xDEADBEEF);
-    assert_eq!(parse_footer_length(&buffer).expect("footer length parse"), 0xDEADBEEF);
+    assert_eq!(
+        parse_footer_length(&buffer).expect("footer length parse"),
+        0xDEADBEEF
+    );
 }
 
 #[test]
 fn parse_footer_rejects_insufficient_bytes() {
     let error = parse_footer(&[1, 2, 3]).expect_err("short footer must fail");
-    assert!(matches!(error, QrdError::InvalidFooterLength | QrdError::UnexpectedEof));
+    assert!(matches!(
+        error,
+        QrdError::InvalidFooterLength | QrdError::UnexpectedEof
+    ));
 }
 
 #[test]
 fn parse_footer_rejects_wrong_checksum() {
-    let schema = SchemaBuilder::new().add_field("id", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("id", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let mut footer_bytes = build_footer(&schema, 1).expect("footer build");
     if let Some(last_byte) = footer_bytes.last_mut() {
         *last_byte ^= 0xFF;
@@ -98,7 +112,10 @@ fn parse_footer_rejects_truncated_schema_payload() {
 
 #[test]
 fn parse_footer_rejects_trailing_bytes() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let mut footer_bytes = build_footer(&schema, 1).expect("footer build");
     footer_bytes.extend_from_slice(&[1, 2, 3]);
     assert!(parse_footer(&footer_bytes).is_err());
@@ -117,7 +134,9 @@ fn parse_footer_uses_expected_crc32_implementation() {
 
 #[test]
 fn schema_builder_rejects_empty_field_names() {
-    let result = SchemaBuilder::new().add_field("", FieldKind::Int32, true).build();
+    let result = SchemaBuilder::new()
+        .add_field("", FieldKind::Int32, true)
+        .build();
     assert!(matches!(result, Err(QrdError::InvalidSchema(_))));
 }
 
@@ -158,14 +177,23 @@ fn schema_deserialize_rejects_invalid_required_flag() {
 
 #[test]
 fn schema_fingerprint_changes_when_field_order_changes() {
-    let a = SchemaBuilder::new().add_field("a", FieldKind::Utf8, true).build().unwrap();
-    let b = SchemaBuilder::new().add_field("b", FieldKind::Utf8, true).build().unwrap();
+    let a = SchemaBuilder::new()
+        .add_field("a", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
+    let b = SchemaBuilder::new()
+        .add_field("b", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     assert_ne!(a.fingerprint(), b.fingerprint());
 }
 
 #[test]
 fn schema_fingerprint_is_stable_for_same_definition() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Boolean, false).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Boolean, false)
+        .build()
+        .unwrap();
     assert_eq!(schema.fingerprint(), schema.fingerprint());
 }
 
@@ -182,7 +210,10 @@ fn schema_serialize_rejects_too_many_fields() {
 #[test]
 fn schema_deserialize_rejects_non_utf8_name() {
     let bytes = vec![1, 2, 0xFF, 0xFE, 5, 1];
-    assert!(matches!(qrd_core::schema::Schema::deserialize(&bytes), Err(QrdError::InvalidSchema(_))));
+    assert!(matches!(
+        qrd_core::schema::Schema::deserialize(&bytes),
+        Err(QrdError::InvalidSchema(_))
+    ));
 }
 
 #[test]
@@ -237,7 +268,12 @@ fn row_group_deserialize_rejects_invalid_column_header() {
 
 #[test]
 fn column_chunk_decode_recovers_plain_payload() {
-    let chunk = qrd_core::row_group::ColumnChunk::new("c", &[1, 2, 3], qrd_core::encoding::EncodingId::Plain).unwrap();
+    let chunk = qrd_core::row_group::ColumnChunk::new(
+        "c",
+        &[1, 2, 3],
+        qrd_core::encoding::EncodingId::Plain,
+    )
+    .unwrap();
     assert_eq!(chunk.decode().unwrap(), vec![1, 2, 3]);
 }
 
@@ -282,7 +318,10 @@ fn row_group_from_rows_with_names_preserves_column_order() {
 
 #[test]
 fn build_and_parse_file_image_roundtrip() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let row_groups = vec![RowGroup::from_rows(&[vec![1, 2], vec![3, 4]]).unwrap()];
     let bytes = build_file_image(&schema, &row_groups).unwrap();
     let parsed = parse_file_image(&bytes).unwrap();
@@ -292,14 +331,22 @@ fn build_and_parse_file_image_roundtrip() {
 
 #[test]
 fn build_file_image_with_signature_sets_header_flag() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let keypair = SigningKeyPair::generate();
     let signature = SchemaSignature::new(
         SIGNATURE_ALGORITHM,
         keypair.sign_schema(&schema.fingerprint()),
         keypair.verifying_key(),
     );
-    let bytes = build_file_image_with_signature(&schema, &[RowGroup::from_rows(&[]).unwrap()], Some(signature)).unwrap();
+    let bytes = build_file_image_with_signature(
+        &schema,
+        &[RowGroup::from_rows(&[]).unwrap()],
+        Some(signature),
+    )
+    .unwrap();
     let parsed = parse_file_image(&bytes).unwrap();
     assert!(parsed.header.is_schema_signed());
 }
@@ -311,7 +358,10 @@ fn parse_file_image_rejects_truncated_header() {
 
 #[test]
 fn parse_file_image_rejects_invalid_row_group_length() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let bytes = build_file_image(&schema, &[]).unwrap();
     let mut truncated = bytes.clone();
     truncated[35] = 0xFF;
@@ -320,7 +370,10 @@ fn parse_file_image_rejects_invalid_row_group_length() {
 
 #[test]
 fn build_file_image_supports_empty_row_groups() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let bytes = build_file_image(&schema, &[]).unwrap();
     let parsed = parse_file_image(&bytes).unwrap();
     assert_eq!(parsed.row_groups.len(), 0);
@@ -329,7 +382,10 @@ fn build_file_image_supports_empty_row_groups() {
 
 #[test]
 fn parse_file_image_rejects_invalid_signature_size() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let bytes = build_file_image(&schema, &[]).unwrap();
     let mut invalid = bytes.clone();
     invalid.extend_from_slice(&[1, 2, 3]);
@@ -338,7 +394,10 @@ fn parse_file_image_rejects_invalid_signature_size() {
 
 #[test]
 fn build_file_image_with_signature_reconstructs_signature() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let keypair = SigningKeyPair::generate();
     let sig = SchemaSignature::new(
         SIGNATURE_ALGORITHM,
@@ -352,7 +411,10 @@ fn build_file_image_with_signature_reconstructs_signature() {
 
 #[test]
 fn parse_file_image_rejects_invalid_footer_length_too_short() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let mut bytes = build_file_image(&schema, &[]).unwrap();
     bytes.truncate(bytes.len() - 2);
     assert!(parse_file_image(&bytes).is_err());
@@ -360,7 +422,10 @@ fn parse_file_image_rejects_invalid_footer_length_too_short() {
 
 #[test]
 fn parse_file_image_rejects_header_with_missing_signature_flag() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let row_groups = vec![RowGroup::from_rows(&[vec![1]]).unwrap()];
     let bytes = build_file_image(&schema, &row_groups).unwrap();
     // Set schema signed bit without actually appending signature
@@ -386,7 +451,10 @@ fn build_file_image_handles_multiple_row_groups() {
 
 #[test]
 fn parse_file_image_rejects_excess_row_group_length() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let mut bytes = build_file_image(&schema, &[]).unwrap();
     bytes[32..36].copy_from_slice(&u32::MAX.to_le_bytes());
     assert!(parse_file_image(&bytes).is_err());
@@ -404,7 +472,8 @@ fn file_reader_read_columns_returns_requested_columns() {
         .build()
         .unwrap();
 
-    let row_group = RowGroup::from_rows_with_names(&[vec![1, 2], vec![3, 4]], &["id", "flag"]).unwrap();
+    let row_group =
+        RowGroup::from_rows_with_names(&[vec![1, 2], vec![3, 4]], &["id", "flag"]).unwrap();
     let bytes = build_file_image(&schema, &[row_group]).unwrap();
     let reader = FileReader::open(&bytes).unwrap();
 
@@ -414,7 +483,10 @@ fn file_reader_read_columns_returns_requested_columns() {
 
 #[test]
 fn file_reader_read_columns_rejects_missing_column() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let bytes = build_file_image(&schema, &[RowGroup::from_rows(&[vec![1]]).unwrap()]).unwrap();
     let reader = FileReader::open(&bytes).unwrap();
     assert!(reader.read_columns(&["y"]).is_err());
@@ -422,7 +494,10 @@ fn file_reader_read_columns_rejects_missing_column() {
 
 #[test]
 fn reader_verify_integrity_detects_row_group_count_mismatch() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let bytes = build_file_image(&schema, &[RowGroup::from_rows(&[vec![1]]).unwrap()]).unwrap();
     let mut truncated = bytes.clone();
     truncated[HEADER_SIZE] = 0;
@@ -432,7 +507,10 @@ fn reader_verify_integrity_detects_row_group_count_mismatch() {
 
 #[test]
 fn file_reader_open_parses_header_footer_and_rows() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let row_group = RowGroup::from_rows(&[vec![7, 8]]).unwrap();
     let bytes = build_file_image(&schema, &[row_group.clone()]).unwrap();
     let reader = FileReader::open(&bytes).unwrap();
@@ -443,7 +521,10 @@ fn file_reader_open_parses_header_footer_and_rows() {
 
 #[test]
 fn file_reader_inspect_header_returns_header_from_bytes() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let header = FileHeader::new(1, 0, schema.fingerprint(), 0, *b"qrd-0.1.0\0\0\0");
     let parsed = FileReader::inspect_header(&header.serialize()).unwrap();
     assert_eq!(parsed, header);
@@ -451,7 +532,10 @@ fn file_reader_inspect_header_returns_header_from_bytes() {
 
 #[test]
 fn file_reader_inspect_footer_returns_footer_from_bytes() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let footer = build_footer(&schema, 1).unwrap();
     let parsed = FileReader::inspect_footer(&footer).unwrap();
     assert_eq!(parsed.row_group_count, 1);
@@ -469,14 +553,22 @@ fn file_reader_inspect_footer_length_returns_length_from_bytes() {
 fn file_reader_read_row_group_roundtrips_row_group_bytes() {
     let row_group = RowGroup::from_rows(&[vec![11, 12], vec![13, 14]]).unwrap();
     let bytes = row_group.serialize().unwrap();
-    let reader = FileReader::new(SchemaBuilder::new().add_field("a", FieldKind::Int32, true).build().unwrap());
+    let reader = FileReader::new(
+        SchemaBuilder::new()
+            .add_field("a", FieldKind::Int32, true)
+            .build()
+            .unwrap(),
+    );
     let roundtrip = reader.read_row_group(&bytes).unwrap();
     assert_eq!(roundtrip, row_group);
 }
 
 #[test]
 fn file_reader_verify_integrity_accepts_matching_row_group_count() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let bytes = build_file_image(&schema, &[RowGroup::from_rows(&[vec![1]]).unwrap()]).unwrap();
     let reader = FileReader::open(&bytes).unwrap();
     assert!(reader.verify_integrity().is_ok());
@@ -484,7 +576,10 @@ fn file_reader_verify_integrity_accepts_matching_row_group_count() {
 
 #[test]
 fn file_reader_open_rejects_corrupted_file_image() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let mut bytes = build_file_image(&schema, &[RowGroup::from_rows(&[vec![1]]).unwrap()]).unwrap();
     bytes[0] ^= 0xFF;
     assert!(FileReader::open(&bytes).is_err());
@@ -496,7 +591,10 @@ fn file_reader_open_rejects_corrupted_file_image() {
 
 #[test]
 fn streaming_writer_finish_once_then_write_after_finish_is_rejected() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let mut writer = qrd_core::writer::StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1]]).unwrap();
     let _ = writer.finish().unwrap();
@@ -505,11 +603,19 @@ fn streaming_writer_finish_once_then_write_after_finish_is_rejected() {
 
 #[test]
 fn streaming_writer_write_after_finish_is_rejected() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let mut writer = qrd_core::writer::StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1]]).unwrap();
     let bytes = writer.finish().unwrap();
-    let mut writer = qrd_core::writer::StreamingWriter::new(SchemaBuilder::new().add_field("x", FieldKind::Int32, true).build().unwrap());
+    let mut writer = qrd_core::writer::StreamingWriter::new(
+        SchemaBuilder::new()
+            .add_field("x", FieldKind::Int32, true)
+            .build()
+            .unwrap(),
+    );
     writer.write_row_group(&[vec![1]]).unwrap();
     assert!(writer.finish().is_ok());
     assert!(bytes.len() > 0);
@@ -517,7 +623,10 @@ fn streaming_writer_write_after_finish_is_rejected() {
 
 #[test]
 fn streaming_writer_build_footer_bytes_matches_file_footer() {
-    let schema = SchemaBuilder::new().add_field("a", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("a", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let mut writer = qrd_core::writer::StreamingWriter::new(schema);
     writer.write_row_group(&[vec![10]]).unwrap();
     let footer_bytes = writer.build_footer_bytes().unwrap();
@@ -526,7 +635,10 @@ fn streaming_writer_build_footer_bytes_matches_file_footer() {
 
 #[test]
 fn streaming_writer_can_sign_schema_and_produce_readable_image() {
-    let schema = SchemaBuilder::new().add_field("id", FieldKind::Int32, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("id", FieldKind::Int32, true)
+        .build()
+        .unwrap();
     let mut writer = qrd_core::writer::StreamingWriter::new(schema.clone());
     let keypair = SigningKeyPair::generate();
     let sig_bytes = keypair.sign_schema(&schema.fingerprint());
@@ -539,7 +651,10 @@ fn streaming_writer_can_sign_schema_and_produce_readable_image() {
 
 #[test]
 fn streaming_writer_row_groups_are_counted_correctly() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let mut writer = qrd_core::writer::StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1], vec![2]]).unwrap();
     writer.write_row_group(&[vec![3], vec![4]]).unwrap();
@@ -548,10 +663,19 @@ fn streaming_writer_row_groups_are_counted_correctly() {
 
 #[test]
 fn streaming_writer_can_clear_signature() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let mut writer = qrd_core::writer::StreamingWriter::new(schema);
     let keypair = SigningKeyPair::generate();
-    let sig_bytes = keypair.sign_schema(&SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap().fingerprint());
+    let sig_bytes = keypair.sign_schema(
+        &SchemaBuilder::new()
+            .add_field("x", FieldKind::Utf8, true)
+            .build()
+            .unwrap()
+            .fingerprint(),
+    );
     let sig = SchemaSignature::new(SIGNATURE_ALGORITHM, sig_bytes, keypair.verifying_key());
     writer.set_signature(sig);
     writer.clear_signature();
@@ -563,7 +687,10 @@ fn streaming_writer_can_clear_signature() {
 
 #[test]
 fn streaming_writer_can_write_multiple_row_groups_before_finish() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let mut writer = qrd_core::writer::StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1]]).unwrap();
     writer.write_row_group(&[vec![2]]).unwrap();
@@ -574,7 +701,10 @@ fn streaming_writer_can_write_multiple_row_groups_before_finish() {
 
 #[test]
 fn streaming_writer_build_footer_bytes_works_for_empty_writer() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let writer = qrd_core::writer::StreamingWriter::new(schema);
     let footer_bytes = writer.build_footer_bytes().unwrap();
     assert!(footer_bytes.len() > 0);
@@ -595,7 +725,10 @@ fn streaming_writer_handles_empty_row_group_with_names() {
 
 #[test]
 fn streaming_writer_rejects_row_group_after_finish() {
-    let schema = SchemaBuilder::new().add_field("x", FieldKind::Utf8, true).build().unwrap();
+    let schema = SchemaBuilder::new()
+        .add_field("x", FieldKind::Utf8, true)
+        .build()
+        .unwrap();
     let mut writer = qrd_core::writer::StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1]]).unwrap();
     let bytes = writer.finish().unwrap();
@@ -739,7 +872,10 @@ fn rs_encode_and_recover_roundtrip_for_multiple_parity_chunks() {
 #[test]
 fn encode_plain_roundtrip_is_identity() {
     let values = [1u8, 2, 3, 255];
-    assert_eq!(encode_values(&values, EncodingId::Plain).unwrap(), values.to_vec());
+    assert_eq!(
+        encode_values(&values, EncodingId::Plain).unwrap(),
+        values.to_vec()
+    );
 }
 
 #[test]
@@ -753,41 +889,59 @@ fn encode_rle_roundtrip_works_for_repeated_values() {
 fn encode_bit_packed_roundtrip_handles_zeroes_and_ones() {
     let sample = [0u8, 1, 2, 3, 4, 255];
     let encoded = encode_values(&sample, EncodingId::BitPacked).unwrap();
-    assert_eq!(decode(&encoded, EncodingId::BitPacked).unwrap(), sample.to_vec());
+    assert_eq!(
+        decode(&encoded, EncodingId::BitPacked).unwrap(),
+        sample.to_vec()
+    );
 }
 
 #[test]
 fn decode_bit_packed_rejects_invalid_bit_width() {
     let bad = vec![1, 0, 0, 0, 9, 0, 0, 0];
-    assert!(matches!(decode(&bad, EncodingId::BitPacked), Err(QrdError::InvalidSchema(_))));
+    assert!(matches!(
+        decode(&bad, EncodingId::BitPacked),
+        Err(QrdError::InvalidSchema(_))
+    ));
 }
 
 #[test]
 fn delta_binary_roundtrip_overflow_wraps() {
     let sample = [255u8, 0, 1, 2];
     let encoded = encode_values(&sample, EncodingId::DeltaBinary).unwrap();
-    assert_eq!(decode(&encoded, EncodingId::DeltaBinary).unwrap(), sample.to_vec());
+    assert_eq!(
+        decode(&encoded, EncodingId::DeltaBinary).unwrap(),
+        sample.to_vec()
+    );
 }
 
 #[test]
 fn delta_byte_array_roundtrip_works_for_empty_payload() {
     let sample = [] as [u8; 0];
     let encoded = encode_values(&sample, EncodingId::DeltaByteArray).unwrap();
-    assert_eq!(decode(&encoded, EncodingId::DeltaByteArray).unwrap(), sample.to_vec());
+    assert_eq!(
+        decode(&encoded, EncodingId::DeltaByteArray).unwrap(),
+        sample.to_vec()
+    );
 }
 
 #[test]
 fn byte_stream_split_roundtrip_works_for_random_values() {
     let sample = [12u8, 34, 56, 78, 90];
     let encoded = encode_values(&sample, EncodingId::ByteStreamSplit).unwrap();
-    assert_eq!(decode(&encoded, EncodingId::ByteStreamSplit).unwrap(), sample.to_vec());
+    assert_eq!(
+        decode(&encoded, EncodingId::ByteStreamSplit).unwrap(),
+        sample.to_vec()
+    );
 }
 
 #[test]
 fn dict_rle_roundtrip_works_for_repeated_dictionary_values() {
     let sample = [7u8, 7, 7, 8, 8, 9];
     let encoded = encode_values(&sample, EncodingId::DictRle).unwrap();
-    assert_eq!(decode(&encoded, EncodingId::DictRle).unwrap(), sample.to_vec());
+    assert_eq!(
+        decode(&encoded, EncodingId::DictRle).unwrap(),
+        sample.to_vec()
+    );
 }
 
 // -----------------------------------------------------------------------------
@@ -837,8 +991,14 @@ fn compression_decompress_rejects_invalid_payload() {
 
 #[test]
 fn compression_empty_payload_returns_empty_vector() {
-    assert_eq!(compress(&[], CompressionKind::Lz4).unwrap(), Vec::<u8>::new());
-    assert_eq!(decompress(&[], CompressionKind::Lz4).unwrap(), Vec::<u8>::new());
+    assert_eq!(
+        compress(&[], CompressionKind::Lz4).unwrap(),
+        Vec::<u8>::new()
+    );
+    assert_eq!(
+        decompress(&[], CompressionKind::Lz4).unwrap(),
+        Vec::<u8>::new()
+    );
 }
 
 #[test]
@@ -856,37 +1016,73 @@ fn compression_adaptive_uses_zstd_for_large_payloads() {
 #[test]
 fn derive_key_produces_unique_keys_for_different_fingerprints() {
     let master_key = b"master key";
-    let a = EncryptionConfig { column_name: "col".to_string(), schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8] };
-    let b = EncryptionConfig { column_name: "col".to_string(), schema_fingerprint: [8, 7, 6, 5, 4, 3, 2, 1] };
-    assert_ne!(derive_column_key(master_key, &a).unwrap(), derive_column_key(master_key, &b).unwrap());
+    let a = EncryptionConfig {
+        column_name: "col".to_string(),
+        schema_fingerprint: [1, 2, 3, 4, 5, 6, 7, 8],
+    };
+    let b = EncryptionConfig {
+        column_name: "col".to_string(),
+        schema_fingerprint: [8, 7, 6, 5, 4, 3, 2, 1],
+    };
+    assert_ne!(
+        derive_column_key(master_key, &a).unwrap(),
+        derive_column_key(master_key, &b).unwrap()
+    );
 }
 
 #[test]
 fn encrypt_decrypt_empty_payload_returns_original_empty() {
-    let config = EncryptionConfig { column_name: "col".to_string(), schema_fingerprint: [9, 9, 9, 9, 9, 9, 9, 9] };
+    let config = EncryptionConfig {
+        column_name: "col".to_string(),
+        schema_fingerprint: [9, 9, 9, 9, 9, 9, 9, 9],
+    };
     let key = derive_column_key(b"long master key 32 bytes........", &config).unwrap();
     let encrypted = encrypt_payload(&[], &key).unwrap();
-    let decrypted = decrypt_payload(&encrypted.ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag).unwrap();
+    let decrypted = decrypt_payload(
+        &encrypted.ciphertext,
+        &key,
+        &encrypted.nonce,
+        &encrypted.auth_tag,
+    )
+    .unwrap();
     assert!(decrypted.is_empty());
 }
 
 #[test]
 fn encrypt_decrypt_roundtrip_reconstructs_payload() {
-    let config = EncryptionConfig { column_name: "col".to_string(), schema_fingerprint: [9, 9, 9, 9, 9, 9, 9, 9] };
+    let config = EncryptionConfig {
+        column_name: "col".to_string(),
+        schema_fingerprint: [9, 9, 9, 9, 9, 9, 9, 9],
+    };
     let key = derive_column_key(b"long master key 32 bytes........", &config).unwrap();
     let plaintext = b"payload to protect";
     let encrypted = encrypt_payload(plaintext, &key).unwrap();
-    let decrypted = decrypt_payload(&encrypted.ciphertext, &key, &encrypted.nonce, &encrypted.auth_tag).unwrap();
+    let decrypted = decrypt_payload(
+        &encrypted.ciphertext,
+        &key,
+        &encrypted.nonce,
+        &encrypted.auth_tag,
+    )
+    .unwrap();
     assert_eq!(decrypted, plaintext);
 }
 
 #[test]
 fn decrypt_with_wrong_key_fails_authentication() {
-    let config = EncryptionConfig { column_name: "col".to_string(), schema_fingerprint: [0, 0, 0, 0, 0, 0, 0, 1] };
+    let config = EncryptionConfig {
+        column_name: "col".to_string(),
+        schema_fingerprint: [0, 0, 0, 0, 0, 0, 0, 1],
+    };
     let key = derive_column_key(b"master key...............0101", &config).unwrap();
     let bad_key = derive_column_key(b"another master key........", &config).unwrap();
     let encrypted = encrypt_payload(b"secret", &key).unwrap();
-    assert!(decrypt_payload(&encrypted.ciphertext, &bad_key, &encrypted.nonce, &encrypted.auth_tag).is_err());
+    assert!(decrypt_payload(
+        &encrypted.ciphertext,
+        &bad_key,
+        &encrypted.nonce,
+        &encrypted.auth_tag
+    )
+    .is_err());
 }
 
 #[test]
@@ -897,7 +1093,11 @@ fn unpack_encrypted_chunk_rejects_payload_too_short() {
 
 #[test]
 fn pack_and_unpack_encrypted_chunk_roundtrip() {
-    let chunk = qrd_core::encryption::EncryptedChunk { nonce: Nonce([1u8; 12]), auth_tag: AuthTag([2u8; 16]), ciphertext: vec![3, 4, 5] };
+    let chunk = qrd_core::encryption::EncryptedChunk {
+        nonce: Nonce([1u8; 12]),
+        auth_tag: AuthTag([2u8; 16]),
+        ciphertext: vec![3, 4, 5],
+    };
     let packed = qrd_core::encryption::pack_encrypted_chunk(&chunk);
     let unpacked = qrd_core::encryption::unpack_encrypted_chunk(&packed).unwrap();
     assert_eq!(unpacked, chunk);
@@ -905,7 +1105,10 @@ fn pack_and_unpack_encrypted_chunk_roundtrip() {
 
 #[test]
 fn derive_column_key_rejects_empty_master_key() {
-    let config = EncryptionConfig { column_name: "col".to_string(), schema_fingerprint: [0, 1, 2, 3, 4, 5, 6, 7] };
+    let config = EncryptionConfig {
+        column_name: "col".to_string(),
+        schema_fingerprint: [0, 1, 2, 3, 4, 5, 6, 7],
+    };
     assert!(derive_column_key(&[], &config).is_err());
 }
 
@@ -952,7 +1155,9 @@ fn signature_verification_rejects_invalid_signature_bytes_length() {
     let keypair = SigningKeyPair::generate();
     let vk_bytes = keypair.verifying_key();
     let verifying_key = VerifyingKeyPair::from_bytes(&vk_bytes).unwrap();
-    assert!(verifying_key.verify_signature(&[1u8; 8], &[0u8; 63]).is_err());
+    assert!(verifying_key
+        .verify_signature(&[1u8; 8], &[0u8; 63])
+        .is_err());
 }
 
 #[test]

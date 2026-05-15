@@ -155,12 +155,7 @@ fn benchmark_writer(c: &mut Criterion) {
         .add_field("status", FieldKind::Int32, false)
         .build()
         .expect("schema should build");
-    let rows = black_box(vec![
-        vec![1, 2],
-        vec![3, 4],
-        vec![5, 6],
-        vec![7, 8],
-    ]);
+    let rows = black_box(vec![vec![1, 2], vec![3, 4], vec![5, 6], vec![7, 8]]);
 
     c.bench_function("writer_write_row_group_small", |b| {
         b.iter_batched(

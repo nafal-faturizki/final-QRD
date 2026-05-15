@@ -53,14 +53,12 @@ pub(crate) fn build_file_image_from_serialized_row_groups(
     let footer_length = u32::try_from(footer.len())
         .map_err(|_| QrdError::InvalidSchema("footer too large".into()))?;
 
-    let signature_bytes = match signature {
-        Some(sig) => Some(sig.serialize()),
-        None => None,
-    };
+    let signature_bytes = signature.map(|sig| sig.serialize());
     let signature_length = signature_bytes.as_ref().map(Vec::len).unwrap_or(0);
     let row_group_bytes_len: usize = row_groups.iter().map(|bytes| 4 + bytes.len()).sum();
 
-    let mut bytes = Vec::with_capacity(HEADER_SIZE + row_group_bytes_len + footer.len() + signature_length + 4);
+    let mut bytes =
+        Vec::with_capacity(HEADER_SIZE + row_group_bytes_len + footer.len() + signature_length + 4);
     bytes.extend_from_slice(&header.serialize());
 
     for serialized in row_groups {
@@ -180,7 +178,7 @@ mod tests {
 
     #[test]
     fn file_image_with_signature_roundtrip() {
-        use crate::signing::{SigningKeyPair, SchemaSignature, SIGNATURE_ALGORITHM};
+        use crate::signing::{SchemaSignature, SigningKeyPair, SIGNATURE_ALGORITHM};
 
         let schema = SchemaBuilder::new()
             .add_field("device_id", FieldKind::Utf8, true)
@@ -233,7 +231,7 @@ mod tests {
 
     #[test]
     fn file_image_rejects_invalid_signature() {
-        use crate::signing::{SigningKeyPair, SchemaSignature, SIGNATURE_ALGORITHM};
+        use crate::signing::{SchemaSignature, SigningKeyPair, SIGNATURE_ALGORITHM};
 
         let schema = SchemaBuilder::new()
             .add_field("device_id", FieldKind::Utf8, true)
@@ -257,4 +255,3 @@ mod tests {
         assert!(parse_file_image(&bytes).is_err());
     }
 }
-

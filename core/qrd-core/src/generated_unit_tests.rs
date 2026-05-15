@@ -60,7 +60,10 @@ fn run_transpose_roundtrip(seed: u8) {
 
     for column_index in 0..width {
         for row_index in 0..row_count {
-            assert_eq!(columns[column_index][row_index], rows[row_index][column_index]);
+            assert_eq!(
+                columns[column_index][row_index],
+                rows[row_index][column_index]
+            );
         }
     }
 

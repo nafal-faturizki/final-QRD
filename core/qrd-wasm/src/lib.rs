@@ -1,5 +1,7 @@
 use qrd_core::compression::{compress, decompress, CompressionKind};
-use qrd_core::encryption::{decrypt_payload, derive_column_key, encrypt_payload, AuthTag, EncryptionConfig, Nonce};
+use qrd_core::encryption::{
+    decrypt_payload, derive_column_key, encrypt_payload, AuthTag, EncryptionConfig, Nonce,
+};
 use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileHeader};
 use wasm_bindgen::prelude::*;
 
@@ -121,26 +123,22 @@ pub fn serialize_header(
 
 #[wasm_bindgen]
 pub fn compress_zstd(payload: &[u8]) -> Result<Vec<u8>, JsValue> {
-    compress(payload, CompressionKind::Zstd)
-        .map_err(|err| JsValue::from_str(&err.to_string()))
+    compress(payload, CompressionKind::Zstd).map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
 #[wasm_bindgen]
 pub fn decompress_zstd(payload: &[u8]) -> Result<Vec<u8>, JsValue> {
-    decompress(payload, CompressionKind::Zstd)
-        .map_err(|err| JsValue::from_str(&err.to_string()))
+    decompress(payload, CompressionKind::Zstd).map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
 #[wasm_bindgen]
 pub fn compress_lz4(payload: &[u8]) -> Result<Vec<u8>, JsValue> {
-    compress(payload, CompressionKind::Lz4)
-        .map_err(|err| JsValue::from_str(&err.to_string()))
+    compress(payload, CompressionKind::Lz4).map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
 #[wasm_bindgen]
 pub fn decompress_lz4(payload: &[u8]) -> Result<Vec<u8>, JsValue> {
-    decompress(payload, CompressionKind::Lz4)
-        .map_err(|err| JsValue::from_str(&err.to_string()))
+    decompress(payload, CompressionKind::Lz4).map_err(|err| JsValue::from_str(&err.to_string()))
 }
 
 #[wasm_bindgen]
@@ -166,10 +164,7 @@ pub fn derive_key(
 }
 
 #[wasm_bindgen]
-pub fn encrypt(
-    payload: &[u8],
-    key: &[u8],
-) -> Result<EncryptedChunk, JsValue> {
+pub fn encrypt(payload: &[u8], key: &[u8]) -> Result<EncryptedChunk, JsValue> {
     if key.len() != 32 {
         return Err(JsValue::from_str("key must be 32 bytes"));
     }

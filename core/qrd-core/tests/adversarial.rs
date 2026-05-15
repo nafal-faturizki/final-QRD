@@ -1,9 +1,9 @@
 // Tests for adversarial/attack payloads
 
+use qrd_core::encryption::encrypt_payload;
 use qrd_core::reader::FileReader;
 use qrd_core::schema::{FieldKind, SchemaBuilder};
 use qrd_core::writer::StreamingWriter;
-use qrd_core::encryption::encrypt_payload;
 
 // ============= Adversarial Payload Tests =============
 
@@ -16,7 +16,7 @@ fn adversarial_compression_bomb() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Try to write highly compressible data (all zeros)
     let bomb_data = vec![0u8; 1_000_000];
     match writer.write_row_group(&[bomb_data]) {
@@ -24,7 +24,10 @@ fn adversarial_compression_bomb() {
             match writer.finish() {
                 Ok(buffer) => {
                     // Should have compressed well
-                    assert!(buffer.len() < 10_000, "Compression bomb should compress significantly");
+                    assert!(
+                        buffer.len() < 10_000,
+                        "Compression bomb should compress significantly"
+                    );
                 }
                 Err(_) => {
                     // May fail on memory limits
@@ -40,19 +43,13 @@ fn adversarial_compression_bomb() {
 #[test]
 fn adversarial_format_string_payload() {
     // Test defense against format string attacks in field names
-    let format_strings = vec![
-        "%x %x %x",
-        "%n",
-        "%s",
-        "${var}",
-        "#{expr}",
-    ];
-    
+    let format_strings = vec!["%x %x %x", "%n", "%s", "${var}", "#{expr}"];
+
     for fs in format_strings {
         let schema = SchemaBuilder::new()
             .add_field(fs, FieldKind::Int32, false)
             .build();
-        
+
         // Should either accept or reject safely
         match schema {
             Ok(s) => {
@@ -75,7 +72,7 @@ fn adversarial_utf8_attack() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Try to write invalid UTF-8
     let invalid_utf8 = vec![0xFF, 0xFE, 0xFD];
     match writer.write_row_group(&[invalid_utf8]) {
@@ -97,7 +94,7 @@ fn adversarial_integer_overflow_attempt() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Try to write values that might overflow
     let overflow_values = vec![
         i32::MAX.to_le_bytes().to_vec(),
@@ -105,11 +102,11 @@ fn adversarial_integer_overflow_attempt() {
         (0i32).to_le_bytes().to_vec(),
         (-1i32).to_le_bytes().to_vec(),
     ];
-    
+
     for vals in overflow_values {
         let _ = writer.write_row_group(&[vals]);
     }
-    
+
     let _ = writer.finish();
 }
 
@@ -117,20 +114,16 @@ fn adversarial_integer_overflow_attempt() {
 fn adversarial_malformed_schema_field_count() {
     // Test schema with extreme field count
     let mut builder = SchemaBuilder::new();
-    
+
     // Add many fields
     for i in 0..500 {
-        builder = builder.add_field(
-            &format!("field_{:04}", i),
-            FieldKind::Int32,
-            false
-        );
+        builder = builder.add_field(&format!("field_{:04}", i), FieldKind::Int32, false);
     }
-    
+
     match builder.build() {
         Ok(schema) => {
             let mut writer = StreamingWriter::new(schema);
-            
+
             // Try to write data with many columns
             let large_row = vec![1u8; 500];
             match writer.write_row_group(&[large_row]) {
@@ -157,12 +150,12 @@ fn adversarial_path_traversal_in_fieldname() {
         "/etc/shadow",
         "C:\\Windows\\System32\\config\\sam",
     ];
-    
+
     for name in traversal_names {
         let schema = SchemaBuilder::new()
             .add_field(name, FieldKind::Utf8, false)
             .build();
-        
+
         // Should handle these safely
         let _ = schema;
     }
@@ -177,7 +170,7 @@ fn adversarial_null_byte_injection() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Null byte in middle of string
     let null_string = b"before\x00after".to_vec();
     match writer.write_row_group(&[null_string]) {
@@ -200,7 +193,7 @@ fn adversarial_oversized_field_claim() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Try normal write
     let small_data = b"x";
     match writer.write_row_group(&[small_data.to_vec()]) {
@@ -216,18 +209,18 @@ fn adversarial_encryption_key_prediction() {
     // Test that encryption keys are not predictable
     let key = [0x42u8; 32];
     let payload = b"test";
-    
+
     // Encrypt multiple times
     let ciphertexts: Vec<_> = (0..100)
         .filter_map(|_| encrypt_payload(payload, &key).ok())
         .map(|ec| ec.ciphertext)
         .collect();
-    
+
     // Check for patterns that might indicate weak encryption
     // All ciphertexts should differ due to nonce
     let mut all_different = true;
     for i in 0..ciphertexts.len() {
-        for j in (i+1)..ciphertexts.len() {
+        for j in (i + 1)..ciphertexts.len() {
             if ciphertexts[i] == ciphertexts[j] {
                 all_different = false;
                 break;
@@ -237,8 +230,11 @@ fn adversarial_encryption_key_prediction() {
             break;
         }
     }
-    
-    assert!(all_different, "All encryptions should differ due to unique nonce");
+
+    assert!(
+        all_different,
+        "All encryptions should differ due to unique nonce"
+    );
 }
 
 #[test]
@@ -246,25 +242,26 @@ fn adversarial_timing_side_channel_resistance() {
     // Test that operations complete in consistent time
     let key = [0x42u8; 32];
     let payload = b"secret";
-    
+
     let mut times = Vec::new();
-    
+
     for _ in 0..5 {
         let start = std::time::Instant::now();
         let _ = encrypt_payload(payload, &key);
         times.push(start.elapsed());
     }
-    
+
     // Times should be relatively consistent (no huge variance)
     // This is a rough check - proper constant-time verification needs more sophisticated timing tests
     let avg = times.iter().map(|t| t.as_nanos()).sum::<u128>() / times.len() as u128;
-    
+
     // Allow 5x variance for non-constant-time implementation, but not 100x
-    let max_variance = times.iter()
+    let max_variance = times
+        .iter()
         .map(|t| (t.as_nanos() as i128 - avg as i128).abs() as u128)
         .max()
         .unwrap_or(0);
-    
+
     // Just verify it doesn't take wildly different times
     let _ = max_variance;
 }
@@ -273,16 +270,12 @@ fn adversarial_timing_side_channel_resistance() {
 fn adversarial_deeply_nested_metadata() {
     // Test deeply nested metadata structures
     let mut builder = SchemaBuilder::new();
-    
+
     // Add many nested levels through field metadata
     for i in 0..100 {
-        builder = builder.add_field(
-            &format!("level_{:03}_field", i),
-            FieldKind::Int32,
-            false
-        );
+        builder = builder.add_field(&format!("level_{:03}_field", i), FieldKind::Int32, false);
     }
-    
+
     match builder.build() {
         Ok(schema) => {
             let mut writer = StreamingWriter::new(schema);
@@ -313,18 +306,16 @@ fn adversarial_symlink_path_in_data() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Try to encode symlink-like data - use simpler format
     let symlink_path = b"symlink_attack";
     match writer.write_row_group(&[symlink_path.to_vec()]) {
-        Ok(_) => {
-            match writer.finish() {
-                Ok(buffer) => {
-                    let _ = FileReader::open(&buffer);
-                }
-                Err(_) => {}
+        Ok(_) => match writer.finish() {
+            Ok(buffer) => {
+                let _ = FileReader::open(&buffer);
             }
-        }
+            Err(_) => {}
+        },
         Err(_) => {
             // May fail on validation
         }
@@ -340,7 +331,7 @@ fn adversarial_excessive_nesting() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Try to write many row groups
     for _ in 0..1000 {
         match writer.write_row_group(&[vec![1]]) {
@@ -351,7 +342,7 @@ fn adversarial_excessive_nesting() {
             }
         }
     }
-    
+
     match writer.finish() {
         Ok(_buffer) => {}
         Err(_) => {}
@@ -367,7 +358,7 @@ fn adversarial_boundary_values() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Boundary values
     let boundary_values = vec![
         f64::NEG_INFINITY.to_bits().to_le_bytes().to_vec(),
@@ -376,10 +367,10 @@ fn adversarial_boundary_values() {
         0.0_f64.to_bits().to_le_bytes().to_vec(),
         (-0.0_f64).to_bits().to_le_bytes().to_vec(),
     ];
-    
+
     for bv in boundary_values {
         let _ = writer.write_row_group(&[bv]);
     }
-    
+
     let _ = writer.finish();
 }

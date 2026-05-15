@@ -1,9 +1,9 @@
 // Tests for power loss, partial writes, and data resilience
 
+use qrd_core::error::QrdError;
 use qrd_core::reader::FileReader;
 use qrd_core::schema::{FieldKind, SchemaBuilder};
 use qrd_core::writer::StreamingWriter;
-use qrd_core::error::QrdError;
 
 // ============= Power Loss Resilience Tests =============
 
@@ -18,12 +18,12 @@ fn power_loss_incomplete_footer_detected() {
 
     let mut writer = StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1, 2]]).expect("should write");
-    
+
     let buffer = writer.finish().expect("should finish");
-    
+
     // Simulate incomplete footer - truncate the buffer significantly
     let truncated = &buffer[..buffer.len().saturating_sub(20)];
-    
+
     // Attempt to read should fail gracefully
     let result = FileReader::open(truncated);
     assert!(result.is_err(), "Should fail when footer is incomplete");
@@ -40,9 +40,9 @@ fn power_loss_incomplete_header_detected() {
 
     let mut writer = StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1, 2]]).expect("should write");
-    
+
     let buffer = writer.finish().expect("should finish");
-    
+
     // Simulate power loss at header - only first 5 bytes
     if buffer.len() > 5 {
         let truncated = &buffer[..5];
@@ -61,16 +61,14 @@ fn power_loss_complete_row_groups_still_accessible() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Write first complete row group
-    writer.write_row_group(&[
-        vec![1, 2],
-        vec![3, 4],
-        vec![5, 6],
-    ]).expect("should write first group");
-    
+    writer
+        .write_row_group(&[vec![1, 2], vec![3, 4], vec![5, 6]])
+        .expect("should write first group");
+
     let buffer = writer.finish().expect("should finish");
-    
+
     // Try to read - at minimum should not crash
     match FileReader::open(&buffer) {
         Ok(reader) => {
@@ -95,14 +93,14 @@ fn power_loss_metadata_corruption_detected() {
 
     let mut writer = StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1, 2]]).expect("should write");
-    
+
     let buffer = writer.finish().expect("should finish");
-    
+
     // Corrupt magic bytes
     if buffer.len() > 4 {
         let mut corrupted = buffer.clone();
         corrupted[0] ^= 0xFF;
-        
+
         let result = FileReader::open(&corrupted);
         assert!(result.is_err(), "Should reject corrupted magic bytes");
     }
@@ -121,9 +119,9 @@ fn partial_write_incomplete_row_group() {
 
     let mut writer = StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1, 2]]).expect("should write");
-    
+
     let buffer = writer.finish().expect("should finish");
-    
+
     // Truncate mid-way through second row group would be ideal, but we simulate
     // by just truncating significantly
     let truncated = if buffer.len() > 50 {
@@ -131,7 +129,7 @@ fn partial_write_incomplete_row_group() {
     } else {
         &buffer[..(buffer.len() / 2)]
     };
-    
+
     // Should detect the issue
     let result = FileReader::open(truncated);
     // Either fails to parse or succeeds but with partial data
@@ -150,7 +148,7 @@ fn partial_write_incomplete_row_group() {
 fn partial_write_zero_bytes_written() {
     // Simulate a write that wrote nothing
     let empty_buffer: &[u8] = b"";
-    
+
     let result = FileReader::open(empty_buffer);
     assert!(result.is_err(), "Should reject empty buffer");
 }
@@ -166,16 +164,16 @@ fn partial_write_only_header() {
 
     let mut writer = StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1, 2]]).expect("should write");
-    
+
     let buffer = writer.finish().expect("should finish");
-    
+
     // Take only a small portion (roughly header-sized)
     let header_only = if buffer.len() > 32 {
         &buffer[..32]
     } else {
         &buffer
     };
-    
+
     let result = FileReader::open(header_only);
     assert!(result.is_err(), "Should fail when only header is present");
 }
@@ -191,18 +189,20 @@ fn partial_write_detects_checksum_mismatch() {
 
     let mut writer = StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1, 2]]).expect("should write");
-    
+
     let buffer = writer.finish().expect("should finish");
-    
+
     if buffer.len() > 10 {
         // Truncate and try to read
         let truncated = &buffer[..buffer.len() - 10];
-        
+
         match FileReader::open(truncated) {
             Ok(_) => {
                 // May succeed if footer is still intact but truncated
             }
-            Err(QrdError::InvalidFooterLength) | Err(QrdError::UnexpectedEof) | Err(QrdError::InvalidSchema(_)) => {
+            Err(QrdError::InvalidFooterLength)
+            | Err(QrdError::UnexpectedEof)
+            | Err(QrdError::InvalidSchema(_)) => {
                 // Expected errors for partial writes
             }
             Err(e) => {
@@ -224,17 +224,17 @@ fn recovery_detects_corrupted_row_groups() {
 
     let mut writer = StreamingWriter::new(schema);
     for i in 0..5 {
-        let rows: Vec<Vec<u8>> = (0..100).map(|_| vec![i, i+1]).collect();
+        let rows: Vec<Vec<u8>> = (0..100).map(|_| vec![i, i + 1]).collect();
         writer.write_row_group(&rows).expect("should write");
     }
-    
+
     let buffer = writer.finish().expect("should finish");
-    
+
     // Corrupt a byte in the middle
     let mut corrupted = buffer.clone();
     if corrupted.len() > 100 {
         corrupted[100] ^= 0x01;
-        
+
         // Should still be able to read, but may detect corruption
         match FileReader::open(&corrupted) {
             Ok(_reader) => {
@@ -256,10 +256,12 @@ fn resilience_multiple_truncations() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    writer.write_row_group(&[vec![1], vec![2], vec![3]]).expect("should write");
-    
+    writer
+        .write_row_group(&[vec![1], vec![2], vec![3]])
+        .expect("should write");
+
     let buffer = writer.finish().expect("should finish");
-    
+
     // Try multiple truncation points
     for truncation_point in [10, 25, 50, 75].iter() {
         if *truncation_point < buffer.len() {
@@ -282,7 +284,7 @@ fn resilience_large_file_partial_write() {
         .expect("should build");
 
     let mut writer = StreamingWriter::new(schema);
-    
+
     // Write multiple large row groups
     for _ in 0..3 {
         let rows: Vec<Vec<u8>> = (0..1000)
@@ -290,16 +292,12 @@ fn resilience_large_file_partial_write() {
             .collect();
         writer.write_row_group(&rows).expect("should write");
     }
-    
+
     let buffer = writer.finish().expect("should finish");
-    
+
     // Simulate various partial write scenarios
-    let truncation_points = [
-        buffer.len() / 2,
-        buffer.len() * 2 / 3,
-        buffer.len() - 100,
-    ];
-    
+    let truncation_points = [buffer.len() / 2, buffer.len() * 2 / 3, buffer.len() - 100];
+
     for point in truncation_points.iter() {
         if *point < buffer.len() {
             let truncated = &buffer[..*point];

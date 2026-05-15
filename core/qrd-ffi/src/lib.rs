@@ -1,3 +1,5 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref, clippy::manual_c_str_literals)]
+
 use qrd_core::compression::{compress, decompress, CompressionKind};
 use qrd_core::encryption::{derive_column_key, EncryptionConfig};
 use qrd_core::parser::{parse_footer, parse_footer_length, parse_header, FileHeader};
@@ -328,7 +330,7 @@ pub extern "C" fn qrd_writer_finish(
 // COMPRESSION
 // ============================================================================
 
-/// Compresses a payload using Zstandard (compression level 3).
+/// Compresses a payload using Zstandard (compression level 1).
 /// Returns QRD_OK on success, error code otherwise.
 /// On success, writes compressed data to out_compressed_ptr (caller must allocate).
 #[no_mangle]

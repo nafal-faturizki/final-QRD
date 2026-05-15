@@ -1,10 +1,9 @@
 use crate::error::{QrdError, Result};
-use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::aead::{AeadInPlace, KeyInit};
 use aes_gcm::{Aes256Gcm, Key};
 use hkdf::Hkdf;
 use rand::RngCore;
 use sha2::Sha256;
-use std::fmt::Write;
 
 /// Configuration for column encryption.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,14 +42,18 @@ pub fn derive_column_key(master_key: &[u8], config: &EncryptionConfig) -> Result
 
     let hkdf = Hkdf::<Sha256>::new(Some(&config.schema_fingerprint[..]), master_key);
 
-    let mut schema_hex = String::with_capacity(16);
+    let mut info = Vec::with_capacity(5 + config.column_name.len() + 1 + 16);
+    info.extend_from_slice(b"qrd:col:");
+    info.extend_from_slice(config.column_name.as_bytes());
+    info.push(b':');
     for byte in &config.schema_fingerprint {
-        write!(&mut schema_hex, "{:02x}", byte).expect("hex formatting should not fail");
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        info.push(HEX[(byte >> 4) as usize]);
+        info.push(HEX[(byte & 0x0f) as usize]);
     }
-    let info = format!("qrd:col:{}:{}", config.column_name, schema_hex);
     let mut key = [0u8; 32];
 
-    hkdf.expand(info.as_bytes(), &mut key)
+    hkdf.expand(&info, &mut key)
         .map_err(|e| QrdError::InvalidSchema(format!("HKDF expansion failed: {}", e)))?;
 
     Ok(key)
@@ -103,25 +106,18 @@ pub fn encrypt_payload(payload: &[u8], key: &[u8; 32]) -> Result<EncryptedChunk>
     let nonce = generate_nonce()?;
     let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
 
-    let ciphertext = cipher
-        .encrypt(nonce.0.as_slice().into(), payload)
+    let mut ciphertext = payload.to_vec();
+    let auth_tag = cipher
+        .encrypt_in_place_detached(nonce.0.as_slice().into(), b"", &mut ciphertext)
         .map_err(|e| QrdError::InvalidSchema(format!("AES-256-GCM encryption failed: {}", e)))?;
 
-    // The last 16 bytes of ciphertext are the authentication tag
-    if ciphertext.len() < 16 {
-        return Err(QrdError::InvalidSchema(
-            "encryption tag missing from output".into(),
-        ));
-    }
-
-    let auth_tag_start = ciphertext.len() - 16;
-    let mut auth_tag = [0u8; 16];
-    auth_tag.copy_from_slice(&ciphertext[auth_tag_start..]);
+    let mut auth_tag_bytes = [0u8; 16];
+    auth_tag_bytes.copy_from_slice(auth_tag.as_slice());
 
     Ok(EncryptedChunk {
         nonce,
-        auth_tag: AuthTag(auth_tag),
-        ciphertext: ciphertext[..auth_tag_start].to_vec(),
+        auth_tag: AuthTag(auth_tag_bytes),
+        ciphertext,
     })
 }
 
@@ -137,16 +133,20 @@ pub fn decrypt_payload(
     nonce: &Nonce,
     auth_tag: &AuthTag,
 ) -> Result<Vec<u8>> {
-    // Reconstruct ciphertext with tag appended. AES-GCM authentication must be
-    // verified even for empty plaintext payloads, so we cannot skip decryption.
-    let mut full_ciphertext = payload.to_vec();
-    full_ciphertext.extend_from_slice(&auth_tag.0);
-
     let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
 
+    let mut plaintext = payload.to_vec();
+
     cipher
-        .decrypt(nonce.0.as_slice().into(), &full_ciphertext[..])
-        .map_err(|_| QrdError::AuthenticationFailed)
+        .decrypt_in_place_detached(
+            nonce.0.as_slice().into(),
+            b"",
+            &mut plaintext,
+            auth_tag.0.as_slice().into(),
+        )
+        .map_err(|_| QrdError::AuthenticationFailed)?;
+
+    Ok(plaintext)
 }
 
 #[cfg(test)]

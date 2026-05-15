@@ -1,9 +1,9 @@
 // Extended integration tests for qrd-core
 
+use qrd_core::compression::{compress, decompress, CompressionKind};
 use qrd_core::reader::FileReader;
 use qrd_core::schema::{FieldKind, SchemaBuilder};
 use qrd_core::writer::StreamingWriter;
-use qrd_core::compression::{compress, decompress, CompressionKind};
 
 // ============= Schema Tests =============
 
@@ -13,7 +13,7 @@ fn schema_single_field() {
         .add_field("id", FieldKind::Int32, false)
         .build()
         .expect("should build");
-    
+
     assert_eq!(schema.fields().len(), 1);
 }
 
@@ -34,7 +34,7 @@ fn schema_nullable_fields() {
         .add_field("b", FieldKind::Int64, false)
         .build()
         .expect("should build");
-    
+
     assert!(schema.fields()[0].required);
     assert!(!schema.fields()[1].required);
 }
@@ -50,7 +50,7 @@ fn schema_mixed_types() {
         .add_field("utf8_col", FieldKind::Utf8, false)
         .build()
         .expect("should build");
-    
+
     assert_eq!(schema.fields().len(), 6);
 }
 
@@ -62,7 +62,7 @@ fn write_single_row_group() {
         .add_field("id", FieldKind::Int32, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1]]).expect("should write");
     assert_eq!(writer.row_groups().len(), 1);
@@ -75,7 +75,7 @@ fn write_large_row_group() {
         .add_field("value", FieldKind::Float64, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema);
     let large_rows: Vec<Vec<u8>> = (0..5000).map(|_| vec![1, 2]).collect();
     writer.write_row_group(&large_rows).expect("should write");
@@ -89,7 +89,7 @@ fn write_multiple_row_groups() {
         .add_field("value", FieldKind::Float64, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema);
     for _ in 0..10 {
         let rows: Vec<Vec<u8>> = (0..500).map(|_| vec![1, 2]).collect();
@@ -107,11 +107,11 @@ fn read_write_basic() {
         .add_field("value", FieldKind::Float64, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema.clone());
     let rows: Vec<Vec<u8>> = (0..100).map(|i| vec![i as u8, (i >> 8) as u8]).collect();
     writer.write_row_group(&rows).expect("should write");
-    
+
     let bytes = writer.finish().expect("should finish");
     let reader = FileReader::open(&bytes).expect("should open");
     assert_eq!(reader.row_count(), 100);
@@ -124,11 +124,11 @@ fn read_write_large_dataset() {
         .add_field("value", FieldKind::Float64, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema.clone());
     let rows: Vec<Vec<u8>> = (0..2000).map(|i| vec![i as u8, (i >> 8) as u8]).collect();
     writer.write_row_group(&rows).expect("should write");
-    
+
     let bytes = writer.finish().expect("should finish");
     let reader = FileReader::open(&bytes).expect("should open");
     assert_eq!(reader.row_count(), 2000);
@@ -171,7 +171,7 @@ fn compression_large_payload() {
     let data: Vec<u8> = (0..10000).map(|i| (i % 256) as u8).collect();
     let compressed_lz4 = compress(&data, CompressionKind::Lz4).expect("should compress");
     let compressed_zstd = compress(&data, CompressionKind::Zstd).expect("should compress");
-    
+
     assert!(compressed_lz4.len() < data.len());
     assert!(compressed_zstd.len() < data.len());
 }
@@ -181,7 +181,7 @@ fn compression_repeated_data() {
     let data: Vec<u8> = vec![42; 5000];
     let compressed_lz4 = compress(&data, CompressionKind::Lz4).expect("should compress");
     let compressed_zstd = compress(&data, CompressionKind::Zstd).expect("should compress");
-    
+
     assert!(compressed_lz4.len() < data.len() / 10);
     assert!(compressed_zstd.len() < data.len() / 10);
 }
@@ -195,13 +195,13 @@ fn reader_select_single_column() {
         .add_field("c2", FieldKind::Int32, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema.clone());
     writer.write_row_group(&[vec![1, 2]]).expect("should write");
-    
+
     let bytes = writer.finish().expect("should finish");
     let reader = FileReader::open(&bytes).expect("should open");
-    
+
     let cols = reader.read_columns(&["c1"]).expect("should read");
     assert_eq!(cols.len(), 1);
 }
@@ -215,13 +215,15 @@ fn reader_select_multiple_columns() {
         .add_field("c4", FieldKind::Int32, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema.clone());
-    writer.write_row_group(&[vec![1, 2, 3, 4], vec![5, 6, 7, 8]]).expect("should write");
-    
+    writer
+        .write_row_group(&[vec![1, 2, 3, 4], vec![5, 6, 7, 8]])
+        .expect("should write");
+
     let bytes = writer.finish().expect("should finish");
     let reader = FileReader::open(&bytes).expect("should open");
-    
+
     let cols = reader.read_columns(&["c2", "c4"]).expect("should read");
     assert_eq!(cols.len(), 2);
 }
@@ -234,13 +236,15 @@ fn reader_select_different_order() {
         .add_field("c3", FieldKind::Int32, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema.clone());
-    writer.write_row_group(&[vec![1, 2, 3]]).expect("should write");
-    
+    writer
+        .write_row_group(&[vec![1, 2, 3]])
+        .expect("should write");
+
     let bytes = writer.finish().expect("should finish");
     let reader = FileReader::open(&bytes).expect("should open");
-    
+
     let cols = reader.read_columns(&["c3", "c1"]).expect("should read");
     assert_eq!(cols.len(), 2);
 }
@@ -254,11 +258,11 @@ fn file_header_magic_bytes() {
         .add_field("test", FieldKind::Utf8, true)
         .build()
         .expect("schema should build");
-    
+
     let mut writer = StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1, 2]]).expect("should write");
     let bytes = writer.finish().expect("should finish");
-    
+
     assert_eq!(bytes[0], 0x51); // Q
     assert_eq!(bytes[1], 0x52); // R
     assert_eq!(bytes[2], 0x44); // D
@@ -271,12 +275,14 @@ fn file_header_multiple_row_groups() {
         .add_field("id", FieldKind::Int32, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema);
     for i in 0..5 {
-        writer.write_row_group(&[vec![i as u8]]).expect("should write");
+        writer
+            .write_row_group(&[vec![i as u8]])
+            .expect("should write");
     }
-    
+
     let bytes = writer.finish().expect("finish should work");
     let reader = FileReader::open(&bytes).expect("should open");
     assert_eq!(reader.row_count(), 5);
@@ -291,13 +297,13 @@ fn reader_inspect_schema() {
         .add_field("name", FieldKind::Utf8, true)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema.clone());
     writer.write_row_group(&[vec![1, 2]]).expect("should write");
-    
+
     let bytes = writer.finish().expect("should finish");
     let reader = FileReader::open(&bytes).expect("should open");
-    
+
     let read_schema = reader.schema();
     assert_eq!(read_schema.fields().len(), 2);
     assert_eq!(read_schema.fields()[0].name, "id");
@@ -310,10 +316,10 @@ fn reader_row_count() {
         .add_field("id", FieldKind::Int32, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema);
     writer.write_row_group(&[vec![1]]).expect("should write");
-    
+
     let bytes = writer.finish().expect("should finish");
     let reader = FileReader::open(&bytes).expect("should open");
     assert_eq!(reader.row_count(), 1);
@@ -328,16 +334,16 @@ fn full_pipeline_many_fields_many_rows() {
         builder = builder.add_field(&format!("f{}", i), FieldKind::Int32, false);
     }
     let schema = builder.build().expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema.clone());
     let rows: Vec<Vec<u8>> = (0..1000)
         .map(|i| (0..50).map(|j| ((i + j) % 256) as u8).collect())
         .collect();
     writer.write_row_group(&rows).expect("should write");
-    
+
     let bytes = writer.finish().expect("should finish");
     let reader = FileReader::open(&bytes).expect("should open");
-    
+
     assert_eq!(reader.row_count(), 1000);
     assert_eq!(reader.schema().fields().len(), 50);
 }
@@ -350,12 +356,14 @@ fn multiple_schemas() {
             builder = builder.add_field(&format!("f{}", i), FieldKind::Int32, false);
         }
         let schema = builder.build().expect("should build");
-        
+
         let mut writer = StreamingWriter::new(schema);
-        let rows: Vec<Vec<u8>> = (0..50).map(|_| (0..*schema_size).map(|_| 1u8).collect()).collect();
+        let rows: Vec<Vec<u8>> = (0..50)
+            .map(|_| (0..*schema_size).map(|_| 1u8).collect())
+            .collect();
         writer.write_row_group(&rows).expect("should write");
         let bytes = writer.finish().expect("should finish");
-        
+
         assert!(!bytes.is_empty());
     }
 }
@@ -366,13 +374,13 @@ fn stress_test_row_groups() {
         .add_field("id", FieldKind::Int32, false)
         .build()
         .expect("should build");
-    
+
     let mut writer = StreamingWriter::new(schema.clone());
     for _ in 0..50 {
         let rows: Vec<Vec<u8>> = (0..50).map(|_| vec![42]).collect();
         writer.write_row_group(&rows).expect("should write");
     }
-    
+
     let reader = FileReader::new(schema);
     for rg in writer.row_groups() {
         let _ = reader.read_row_group(rg);

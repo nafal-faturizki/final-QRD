@@ -3,6 +3,7 @@ use crate::file::parse_file_image;
 use crate::parser::{parse_footer, parse_footer_length, parse_header, FileFooter, FileHeader};
 use crate::row_group::RowGroup;
 use crate::schema::Schema;
+use std::collections::{HashMap, HashSet};
 
 /// Minimal file reader scaffold.
 pub struct FileReader {
@@ -83,19 +84,39 @@ impl FileReader {
     /// Reads a subset of columns by name from the parsed file image.
     pub fn read_columns(&self, columns: &[&str]) -> Result<Vec<Vec<u8>>> {
         let mut outputs = vec![Vec::new(); columns.len()];
+        let mut requested_columns: HashMap<&str, Vec<usize>> =
+            HashMap::with_capacity(columns.len());
+        for (index, requested_name) in columns.iter().enumerate() {
+            requested_columns
+                .entry(*requested_name)
+                .or_default()
+                .push(index);
+        }
+
         for row_group in &self.row_groups {
-            for (output, requested_name) in outputs.iter_mut().zip(columns.iter()) {
-                let chunk = row_group
-                    .columns
-                    .iter()
-                    .find(|column| column.name == *requested_name)
-                    .ok_or_else(|| {
-                        QrdError::InvalidSchema(format!(
-                            "requested column not found: {requested_name}"
-                        ))
-                    })?;
-                let decoded = chunk.decode()?;
-                output.extend_from_slice(&decoded);
+            let available_columns: HashSet<&str> = row_group
+                .columns
+                .iter()
+                .map(|column| column.name.as_str())
+                .collect();
+
+            for requested_name in requested_columns.keys() {
+                if !available_columns.contains(requested_name) {
+                    return Err(QrdError::InvalidSchema(format!(
+                        "requested column not found: {requested_name}"
+                    )));
+                }
+            }
+
+            for column in &row_group.columns {
+                let Some(requested_indexes) = requested_columns.get(column.name.as_str()) else {
+                    continue;
+                };
+
+                let decoded = column.decode()?;
+                for &output_index in requested_indexes {
+                    outputs[output_index].extend_from_slice(&decoded);
+                }
             }
         }
         Ok(outputs)

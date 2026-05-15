@@ -58,8 +58,44 @@ pub fn decompress(payload: &[u8], kind: CompressionKind) -> Result<Vec<u8>> {
 
 /// Compresses payload using Zstandard.
 fn compress_zstd(payload: &[u8]) -> Result<Vec<u8>> {
-    zstd::encode_all(payload, 3)
+    zstd::encode_all(payload, select_zstd_level(payload))
         .map_err(|e| QrdError::InvalidSchema(format!("ZSTD compression failed: {}", e)))
+}
+
+/// Selects a Zstandard compression level based on a cheap compressibility sample.
+fn select_zstd_level(payload: &[u8]) -> i32 {
+    if payload.len() < 8_192 {
+        return 1;
+    }
+
+    let sample_len = payload.len().min(4_096);
+    let sample = &payload[..sample_len];
+    let mut seen = [false; 256];
+    let mut distinct = 0usize;
+    let mut repeated_pairs = 0usize;
+
+    let mut previous = sample[0];
+    seen[usize::from(previous)] = true;
+    distinct += 1;
+
+    for &byte in &sample[1..] {
+        if !seen[usize::from(byte)] {
+            seen[usize::from(byte)] = true;
+            distinct += 1;
+        }
+
+        if byte == previous {
+            repeated_pairs += 1;
+        }
+
+        previous = byte;
+    }
+
+    if distinct <= 64 || repeated_pairs * 4 >= sample_len {
+        5
+    } else {
+        1
+    }
 }
 
 /// Decompresses payload using Zstandard.

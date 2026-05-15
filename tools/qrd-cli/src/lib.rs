@@ -26,17 +26,30 @@ pub fn inspect_file(path: &Path) -> Result<String> {
     }
 
     let parsed = parse_file_image(&bytes).map_err(|error| format!("file parse failed: {error}"))?;
-    let footer_length = parse_footer_length(&bytes).map_err(|error| format!("footer length parse failed: {error}"))?;
+    let footer_length = parse_footer_length(&bytes)
+        .map_err(|error| format!("footer length parse failed: {error}"))?;
 
     let mut output = String::new();
     output.push_str(&format!("format_major={}\n", parsed.header.format_major));
     output.push_str(&format!("format_minor={}\n", parsed.header.format_minor));
     output.push_str(&format!("flags={}\n", parsed.header.flags));
-    output.push_str(&format!("schema_id={}\n", schema_id_hex(&parsed.header.schema_id)));
+    output.push_str(&format!(
+        "schema_id={}\n",
+        schema_id_hex(&parsed.header.schema_id)
+    ));
     output.push_str(&format!("footer_length={}\n", footer_length));
-    output.push_str(&format!("row_group_count={}\n", parsed.footer.row_group_count));
-    output.push_str(&format!("schema_fields={}\n", parsed.footer.schema.fields().len()));
-    output.push_str(&format!("signature_present={}\n", parsed.signature.is_some()));
+    output.push_str(&format!(
+        "row_group_count={}\n",
+        parsed.footer.row_group_count
+    ));
+    output.push_str(&format!(
+        "schema_fields={}\n",
+        parsed.footer.schema.fields().len()
+    ));
+    output.push_str(&format!(
+        "signature_present={}\n",
+        parsed.signature.is_some()
+    ));
     Ok(output)
 }
 
@@ -49,7 +62,10 @@ pub fn inspect_schema(path: &Path) -> Result<String> {
     let parsed = parse_file_image(&bytes).map_err(|error| format!("file parse failed: {error}"))?;
     let mut output = String::new();
     for field in parsed.footer.schema.fields() {
-        output.push_str(&format!("name={} kind={:?} required={}\n", field.name, field.kind, field.required));
+        output.push_str(&format!(
+            "name={} kind={:?} required={}\n",
+            field.name, field.kind, field.required
+        ));
     }
     Ok(output)
 }
@@ -117,9 +133,12 @@ pub fn verify_file(path: &Path) -> Result<String> {
 pub fn convert_file(mode: &str, input: &Path, output: &Path) -> Result<String> {
     let input_bytes = read_file(input)?;
     let converted_bytes = match mode {
-        "csv" | "json" | "parquet" | "csv-to-qrd" | "parquet-to-qrd" => build_qrd_from_bytes(&input_bytes)?,
+        "csv" | "json" | "parquet" | "csv-to-qrd" | "parquet-to-qrd" => {
+            build_qrd_from_bytes(&input_bytes)?
+        }
         "qrd-to-csv" | "qrd-to-parquet" | "qrd-to-json" => {
-            let parsed = parse_file_image(&input_bytes).map_err(|error| format!("file parse failed: {error}"))?;
+            let parsed = parse_file_image(&input_bytes)
+                .map_err(|error| format!("file parse failed: {error}"))?;
             build_raw_file_from_qrd(&parsed)?
         }
         _ => return Err("unknown conversion mode".into()),
@@ -173,7 +192,7 @@ fn build_qrd_from_bytes(payload: &[u8]) -> Result<Vec<u8>> {
 }
 
 fn build_raw_file_from_qrd(parsed: &ParsedFile) -> Result<Vec<u8>> {
-    let output_rows = if let Some(row_group) = parsed.row_groups.get(0) {
+    let output_rows = if let Some(row_group) = parsed.row_groups.first() {
         row_group_to_rows(row_group)?
     } else {
         Vec::new()
@@ -225,6 +244,15 @@ mod tests {
     use qrd_core::file::build_file_image;
     use qrd_core::row_group::RowGroup;
     use qrd_core::schema::{FieldKind, SchemaBuilder};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_path(prefix: &str, suffix: &str) -> std::path::PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be monotonic")
+            .as_nanos();
+        std::env::temp_dir().join(format!("qrd-cli-{prefix}-{stamp}-{suffix}"))
+    }
 
     #[test]
     fn inspect_and_verify_helpers_work_end_to_end() {
@@ -269,10 +297,9 @@ mod tests {
 
     #[test]
     fn convert_qrd_to_csv_roundtrip_returns_original_content() {
-        let temp_dir = std::env::temp_dir();
-        let input = temp_dir.join("qrd-cli-convert-input.csv");
-        let qrd_output = temp_dir.join("qrd-cli-convert-output.qrd");
-        let roundtrip = temp_dir.join("qrd-cli-convert-roundtrip.csv");
+        let input = unique_temp_path("convert-input", "csv");
+        let qrd_output = unique_temp_path("convert-output", "qrd");
+        let roundtrip = unique_temp_path("convert-roundtrip", "csv");
         let content = b"id,name\n42,example\n";
 
         fs::write(&input, content).expect("should write input");
@@ -287,15 +314,15 @@ mod tests {
 
     #[test]
     fn convert_qrd_to_parquet_roundtrip_returns_raw_bytes() {
-        let temp_dir = std::env::temp_dir();
-        let input = temp_dir.join("qrd-cli-convert-input.parquet");
-        let qrd_output = temp_dir.join("qrd-cli-convert-output.qrd");
-        let roundtrip = temp_dir.join("qrd-cli-convert-roundtrip.parquet");
+        let input = unique_temp_path("convert-input", "parquet");
+        let qrd_output = unique_temp_path("convert-output", "qrd");
+        let roundtrip = unique_temp_path("convert-roundtrip", "parquet");
         let content = b"PAR1\n";
 
         fs::write(&input, content).expect("should write input");
         convert_file("parquet", &input, &qrd_output).expect("convert should work");
-        convert_file("qrd-to-parquet", &qrd_output, &roundtrip).expect("reverse convert should work");
+        convert_file("qrd-to-parquet", &qrd_output, &roundtrip)
+            .expect("reverse convert should work");
 
         assert_eq!(fs::read(&input).unwrap(), fs::read(&roundtrip).unwrap());
         let _ = fs::remove_file(&input);
@@ -303,4 +330,3 @@ mod tests {
         let _ = fs::remove_file(&roundtrip);
     }
 }
-

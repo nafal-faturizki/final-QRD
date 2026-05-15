@@ -3,14 +3,14 @@
 
 #[cfg(test)]
 mod extended_ffi_tests {
-    use qrd_ffi::*;
     use qrd_core::parser::HEADER_SIZE;
+    use qrd_ffi::*;
 
     // ============= Header Size Tests =============
 
     #[test]
     fn header_size_is_valid() {
-        let size = unsafe { qrd_header_size() };
+        let size = qrd_header_size();
         assert!(size > 0);
         assert_eq!(size, HEADER_SIZE);
     }
@@ -43,8 +43,7 @@ mod extended_ffi_tests {
             writer_version: [0; 12],
         };
 
-        let result =
-            unsafe { qrd_parse_header(std::ptr::null(), 0, &mut out_header) };
+        let result = qrd_parse_header(std::ptr::null(), 0, &mut out_header);
 
         assert_eq!(result, QRD_INVALID_ARGUMENT);
     }
@@ -52,13 +51,11 @@ mod extended_ffi_tests {
     #[test]
     fn parse_header_null_output_fails() {
         let header_bytes = vec![0u8; HEADER_SIZE];
-        let result = unsafe {
-            qrd_parse_header(
-                header_bytes.as_ptr(),
-                header_bytes.len(),
-                std::ptr::null_mut(),
-            )
-        };
+        let result = qrd_parse_header(
+            header_bytes.as_ptr(),
+            header_bytes.len(),
+            std::ptr::null_mut(),
+        );
 
         assert_eq!(result, QRD_INVALID_ARGUMENT);
     }
@@ -82,13 +79,8 @@ mod extended_ffi_tests {
                 writer_version: [0; 12],
             };
 
-            let result = unsafe {
-                qrd_parse_header(
-                    header_bytes.as_ptr(),
-                    header_bytes.len(),
-                    &mut out_header,
-                )
-            };
+            let result =
+                qrd_parse_header(header_bytes.as_ptr(), header_bytes.len(), &mut out_header);
 
             assert_eq!(result, QRD_OK);
         }
@@ -112,13 +104,7 @@ mod extended_ffi_tests {
             writer_version: [0; 12],
         };
 
-        let result = unsafe {
-            qrd_parse_header(
-                header_bytes.as_ptr(),
-                header_bytes.len(),
-                &mut out_header,
-            )
-        };
+        let result = qrd_parse_header(header_bytes.as_ptr(), header_bytes.len(), &mut out_header);
 
         assert_eq!(result, QRD_OK);
     }
@@ -135,13 +121,7 @@ mod extended_ffi_tests {
             writer_version: [0; 12],
         };
 
-        let result = unsafe {
-            qrd_parse_header(
-                header_bytes.as_ptr(),
-                header_bytes.len(),
-                &mut out_header,
-            )
-        };
+        let result = qrd_parse_header(header_bytes.as_ptr(), header_bytes.len(), &mut out_header);
 
         assert_eq!(result, QRD_INVALID_FORMAT);
     }
@@ -150,13 +130,13 @@ mod extended_ffi_tests {
 
     #[test]
     fn version_string_not_null() {
-        let version_ptr = unsafe { qrd_version() };
+        let version_ptr = qrd_version();
         assert!(!version_ptr.is_null());
     }
 
     #[test]
     fn version_string_valid() {
-        let version_ptr = unsafe { qrd_version() };
+        let version_ptr = qrd_version();
         let version_cstr = unsafe { std::ffi::CStr::from_ptr(version_ptr) };
         let version_str = version_cstr.to_str().expect("valid utf8");
         assert!(!version_str.is_empty());
@@ -408,13 +388,7 @@ mod extended_ffi_tests {
             writer_version: [0; 12],
         };
 
-        unsafe {
-            qrd_parse_header(
-                header_bytes.as_ptr(),
-                header_bytes.len(),
-                &mut out_header,
-            )
-        };
+        qrd_parse_header(header_bytes.as_ptr(), header_bytes.len(), &mut out_header);
 
         // Verify all fields are set
         assert!(out_header.format_major > 0 || out_header.format_major == 0);
@@ -440,13 +414,7 @@ mod extended_ffi_tests {
             writer_version: [0; 12],
         };
 
-        let result = unsafe {
-            qrd_parse_header(
-                header_bytes.as_ptr(),
-                header_bytes.len(),
-                &mut out_header,
-            )
-        };
+        let result = qrd_parse_header(header_bytes.as_ptr(), header_bytes.len(), &mut out_header);
 
         assert_eq!(result, QRD_OK);
     }
@@ -468,13 +436,8 @@ mod extended_ffi_tests {
                 writer_version: [0; 12],
             };
 
-            let result = unsafe {
-                qrd_parse_header(
-                    header_bytes.as_ptr(),
-                    header_bytes.len(),
-                    &mut out_header,
-                )
-            };
+            let result =
+                qrd_parse_header(header_bytes.as_ptr(), header_bytes.len(), &mut out_header);
 
             assert_eq!(result, QRD_OK);
         }

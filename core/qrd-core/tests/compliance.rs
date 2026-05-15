@@ -1,7 +1,7 @@
 // FIPS 140-3 Level 1 Compliance Verification Tests for QRD Format
 // This module verifies implementation against NIST standards
 
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 /// FIPS 140-3 Compliance Test Suite
 /// Tests verify cryptographic implementations against standards
@@ -49,9 +49,18 @@ fn compliance_aes_256_gcm_vectors() {
 #[test]
 fn compliance_sha256_vectors() {
     let test_vectors = vec![
-        ("", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-        ("abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"),
-        ("message", "ab530a13e45914982b79f9b7e3fba994cfd1f3fb22f71cea1afbf02b460c6d1d"),
+        (
+            "",
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+        (
+            "abc",
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        ),
+        (
+            "message",
+            "ab530a13e45914982b79f9b7e3fba994cfd1f3fb22f71cea1afbf02b460c6d1d",
+        ),
     ];
 
     let num_vectors = test_vectors.len();
@@ -80,7 +89,10 @@ fn compliance_sha256_long_input() {
     let result2 = format!("{:x}", hasher2.finalize());
 
     assert_eq!(result, result2, "SHA-256 1M 'a's should be deterministic");
-    println!("✓ SHA-256 large input (1M bytes): {} (deterministic)", &result[..16]);
+    println!(
+        "✓ SHA-256 large input (1M bytes): {} (deterministic)",
+        &result[..16]
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -93,7 +105,7 @@ fn compliance_hkdf_sha256_test_case_1() {
     // IKM: 0b0b0b0b... (22 bytes)
     // Salt: 000102030405... (13 bytes)
     // Info: f0f1f2f3... (10 bytes)
-    
+
     let ikm_len = 22;
     let salt_len = 13;
     let info_len = 10;

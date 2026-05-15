@@ -1,4 +1,3 @@
-use crate::columnar::transpose_rows;
 use crate::encoding::{decode, encode, EncodingId};
 use crate::error::{QrdError, Result};
 use crate::integrity::crc32;
@@ -49,7 +48,10 @@ impl RowGroup {
 
     /// Creates a row group from a list of row buffers and explicit column names.
     pub fn from_rows_with_names(rows: &[Vec<u8>], column_names: &[&str]) -> Result<Self> {
-        let column_names = column_names.iter().map(|name| (*name).to_string()).collect::<Vec<String>>();
+        let column_names = column_names
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect::<Vec<String>>();
         Self::from_rows_with_owned_names(rows, &column_names)
     }
 
@@ -73,13 +75,14 @@ impl RowGroup {
                 ));
             }
 
-            let columns_data = transpose_rows(rows)?;
             let mut columns = Vec::with_capacity(width);
-            for (name, column) in column_names.iter().zip(columns_data) {
+            for (column_index, name) in column_names.iter().enumerate() {
+                let column = collect_column(rows, column_index);
+                let (encoding, data) = encode_column_adaptively(&column)?;
                 columns.push(ColumnChunk {
                     name: name.clone(),
-                    encoding: EncodingId::Plain,
-                    data: column,
+                    encoding,
+                    data,
                 });
             }
 
@@ -122,37 +125,59 @@ impl RowGroup {
                 ));
             }
 
-            let columns_data = transpose_rows(rows)?;
-            let column_count = u32::try_from(column_names.len())
-                .map_err(|_| QrdError::InvalidSchema("too many columns in row group".into()))?;
-            let mut body_capacity = 8usize;
-            for (name, column) in column_names.iter().zip(&columns_data) {
-                let name_len = name.len();
-                let data_len = column.len();
-                u8::try_from(name_len)
-                    .map_err(|_| QrdError::InvalidSchema("column name too long".into()))?;
-                u32::try_from(data_len)
-                    .map_err(|_| QrdError::InvalidSchema("column chunk too large".into()))?;
-                body_capacity += 1 + name_len + 1 + 4 + data_len + 4;
+            if rows.len() < 32 {
+                let column_count = u32::try_from(column_names.len())
+                    .map_err(|_| QrdError::InvalidSchema("too many columns in row group".into()))?;
+                let mut body = Vec::with_capacity(8usize + rows.len() * width);
+                body.extend_from_slice(&row_count.to_le_bytes());
+                body.extend_from_slice(&column_count.to_le_bytes());
+
+                for (column_index, name) in column_names.iter().enumerate() {
+                    let name_bytes = name.as_bytes();
+                    let name_len = u8::try_from(name_bytes.len())
+                        .map_err(|_| QrdError::InvalidSchema("column name too long".into()))?;
+
+                    body.reserve(1 + name_bytes.len() + 1 + 4 + rows.len() + 4);
+                    body.push(name_len);
+                    body.extend_from_slice(name_bytes);
+                    body.push(EncodingId::Plain.as_u8());
+                    body.extend_from_slice(&row_count.to_le_bytes());
+
+                    let mut checksum = crc32fast::Hasher::new();
+                    for row in rows {
+                        let value = row[column_index];
+                        body.push(value);
+                        checksum.update(&[value]);
+                    }
+
+                    body.extend_from_slice(&checksum.finalize().to_le_bytes());
+                }
+
+                return Ok(body);
             }
 
-            let mut body = Vec::with_capacity(body_capacity);
+            let column_count = u32::try_from(column_names.len())
+                .map_err(|_| QrdError::InvalidSchema("too many columns in row group".into()))?;
+            let mut body = Vec::with_capacity(8usize + rows.len() * width);
             body.extend_from_slice(&row_count.to_le_bytes());
             body.extend_from_slice(&column_count.to_le_bytes());
 
-            for (name, column) in column_names.iter().zip(columns_data) {
+            for (column_index, name) in column_names.iter().enumerate() {
+                let column = collect_column(rows, column_index);
+                let (encoding, encoded) = encode_column_adaptively(&column)?;
                 let name_bytes = name.as_bytes();
                 let name_len = u8::try_from(name_bytes.len())
                     .map_err(|_| QrdError::InvalidSchema("column name too long".into()))?;
-                let data_len = u32::try_from(column.len())
+                let data_len = u32::try_from(encoded.len())
                     .map_err(|_| QrdError::InvalidSchema("column chunk too large".into()))?;
 
+                body.reserve(1 + name_bytes.len() + 1 + 4 + encoded.len() + 4);
                 body.push(name_len);
                 body.extend_from_slice(name_bytes);
-                body.push(EncodingId::Plain.as_u8());
+                body.push(encoding.as_u8());
                 body.extend_from_slice(&data_len.to_le_bytes());
-                body.extend_from_slice(&column);
-                let checksum = crc32(&column);
+                body.extend_from_slice(&encoded);
+                let checksum = crc32(&encoded);
                 body.extend_from_slice(&checksum.to_le_bytes());
             }
 
@@ -164,7 +189,7 @@ impl RowGroup {
             let name_len = name.len();
             u8::try_from(name_len)
                 .map_err(|_| QrdError::InvalidSchema("column name too long".into()))?;
-            body_capacity += 1 + name_len + 1 + 4 + 0 + 4;
+            body_capacity += 1 + name_len + 1 + 4 + 4;
         }
 
         let column_count = u32::try_from(column_names.len())
@@ -248,17 +273,20 @@ impl RowGroup {
                 .to_string();
             cursor = name_end;
 
-                let encoding = EncodingId::from_u8(read_u8(bytes, &mut cursor)?)?;
+            let encoding = EncodingId::from_u8(read_u8(bytes, &mut cursor)?)?;
 
-                let data_len = read_u32_le(bytes, &mut cursor)? as usize;
+            let data_len = read_u32_le(bytes, &mut cursor)? as usize;
 
             let data_end = cursor
                 .checked_add(data_len)
                 .ok_or_else(|| QrdError::InvalidSchema("column data overflow".into()))?;
-                let data = bytes.get(cursor..data_end).ok_or(QrdError::UnexpectedEof)?.to_vec();
+            let data = bytes
+                .get(cursor..data_end)
+                .ok_or(QrdError::UnexpectedEof)?
+                .to_vec();
             cursor = data_end;
 
-                let expected_checksum = read_u32_le(bytes, &mut cursor)?;
+            let expected_checksum = read_u32_le(bytes, &mut cursor)?;
 
             if crc32(&data) != expected_checksum {
                 return Err(QrdError::InvalidSchema("column checksum mismatch".into()));
@@ -279,6 +307,79 @@ impl RowGroup {
 
         Ok(Self { row_count, columns })
     }
+}
+
+fn collect_column(rows: &[Vec<u8>], column_index: usize) -> Vec<u8> {
+    let mut column = Vec::with_capacity(rows.len());
+    for row in rows {
+        column.push(row[column_index]);
+    }
+    column
+}
+
+fn encode_column_adaptively(values: &[u8]) -> Result<(EncodingId, Vec<u8>)> {
+    if values.is_empty() {
+        return Ok((EncodingId::Plain, Vec::new()));
+    }
+
+    let mut distinct = [false; 256];
+    let mut distinct_count = 1usize;
+    let mut max_run = 1usize;
+    let mut current_run = 1usize;
+    let mut repeated_pairs = 0usize;
+    let mut delta_small = 0usize;
+    let mut min_value = values[0];
+    let mut max_value = values[0];
+    let mut previous = values[0];
+
+    distinct[usize::from(previous)] = true;
+
+    for &value in &values[1..] {
+        if !distinct[usize::from(value)] {
+            distinct[usize::from(value)] = true;
+            distinct_count += 1;
+        }
+
+        if value == previous {
+            current_run += 1;
+            repeated_pairs += 1;
+        } else {
+            max_run = max_run.max(current_run);
+            current_run = 1;
+        }
+
+        if value.abs_diff(previous) <= 1 {
+            delta_small += 1;
+        }
+
+        min_value = min_value.min(value);
+        max_value = max_value.max(value);
+        previous = value;
+    }
+
+    max_run = max_run.max(current_run);
+
+    let selected_encoding = if values.len() < 32 {
+        EncodingId::Plain
+    } else if max_run.saturating_mul(2) >= values.len() {
+        EncodingId::Rle
+    } else if distinct_count <= 32 {
+        EncodingId::DictRle
+    } else if max_value <= 0x0f || min_value == max_value {
+        EncodingId::BitPacked
+    } else if repeated_pairs > 0 && delta_small.saturating_mul(2) >= values.len().saturating_sub(1)
+    {
+        EncodingId::DeltaByteArray
+    } else {
+        EncodingId::Plain
+    };
+
+    let encoded = match selected_encoding {
+        EncodingId::Plain => values.to_vec(),
+        _ => encode(values, selected_encoding)?,
+    };
+
+    Ok((selected_encoding, encoded))
 }
 
 #[inline]

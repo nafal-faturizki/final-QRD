@@ -1,5 +1,5 @@
 // Timing Attack Resistance Tests for QRD Cryptographic Operations
-// 
+//
 // These tests verify that cryptographic operations execute in constant time,
 // regardless of input values. This prevents timing side-channel attacks where
 // attackers measure operation duration to infer secret information.
@@ -10,7 +10,7 @@ use std::time::Instant;
 
 #[test]
 fn timing_valid_vs_invalid_auth_tags() {
-    use qrd_core::encryption::{encrypt_payload, decrypt_payload, EncryptionConfig};
+    use qrd_core::encryption::{decrypt_payload, encrypt_payload, EncryptionConfig};
 
     const NUM_ITERATIONS: usize = 100;
     const PLAINTEXT: &[u8] = b"sensitive data that must be protected from timing attacks";
@@ -52,12 +52,7 @@ fn timing_valid_vs_invalid_auth_tags() {
         invalid_tag.0[0] ^= 0x01;
 
         let start = Instant::now();
-        let result = decrypt_payload(
-            &encrypted.ciphertext,
-            &key,
-            &encrypted.nonce,
-            &invalid_tag,
-        );
+        let result = decrypt_payload(&encrypted.ciphertext, &key, &encrypted.nonce, &invalid_tag);
         let elapsed = start.elapsed();
 
         assert!(result.is_err(), "decryption should fail with invalid tag");
@@ -66,7 +61,8 @@ fn timing_valid_vs_invalid_auth_tags() {
 
     // Calculate statistics
     let valid_avg = valid_times.iter().sum::<std::time::Duration>() / valid_times.len() as u32;
-    let invalid_avg = invalid_times.iter().sum::<std::time::Duration>() / invalid_times.len() as u32;
+    let invalid_avg =
+        invalid_times.iter().sum::<std::time::Duration>() / invalid_times.len() as u32;
 
     let valid_min = valid_times.iter().min().copied().unwrap_or_default();
     let valid_max = valid_times.iter().max().copied().unwrap_or_default();
@@ -86,17 +82,22 @@ fn timing_valid_vs_invalid_auth_tags() {
     println!("  - Average: {:?}", valid_avg);
     println!("  - Min: {:?}", valid_min);
     println!("  - Max: {:?}", valid_max);
-    println!("  - Variance: {:.2}%", 
-        (valid_max.as_nanos() as f64 - valid_min.as_nanos() as f64) 
-            / valid_avg.as_nanos() as f64 * 100.0);
+    println!(
+        "  - Variance: {:.2}%",
+        (valid_max.as_nanos() as f64 - valid_min.as_nanos() as f64) / valid_avg.as_nanos() as f64
+            * 100.0
+    );
 
     println!("\nInvalid Auth Tag Timings (1-bit flip):");
     println!("  - Average: {:?}", invalid_avg);
     println!("  - Min: {:?}", invalid_min);
     println!("  - Max: {:?}", invalid_max);
-    println!("  - Variance: {:.2}%",
+    println!(
+        "  - Variance: {:.2}%",
         (invalid_max.as_nanos() as f64 - invalid_min.as_nanos() as f64)
-            / invalid_avg.as_nanos() as f64 * 100.0);
+            / invalid_avg.as_nanos() as f64
+            * 100.0
+    );
 
     let diff_avg = if valid_avg.as_nanos() > invalid_avg.as_nanos() {
         valid_avg.as_nanos() - invalid_avg.as_nanos()
@@ -125,7 +126,7 @@ fn timing_valid_vs_invalid_auth_tags() {
 
 #[test]
 fn timing_correct_vs_incorrect_key() {
-    use qrd_core::encryption::{encrypt_payload, decrypt_payload, EncryptionConfig};
+    use qrd_core::encryption::{decrypt_payload, encrypt_payload, EncryptionConfig};
 
     const NUM_ITERATIONS: usize = 50;
     const PLAINTEXT: &[u8] = b"test message";
@@ -141,7 +142,7 @@ fn timing_correct_vs_incorrect_key() {
 
     // Generate incorrect key by modifying correct key
     let mut incorrect_key = correct_key;
-    incorrect_key[0] ^= 0xFF;  // Flip all bits in first byte
+    incorrect_key[0] ^= 0xFF; // Flip all bits in first byte
 
     let encrypted = encrypt_payload(PLAINTEXT, &correct_key).expect("encryption should work");
 
@@ -160,7 +161,7 @@ fn timing_correct_vs_incorrect_key() {
             &encrypted.auth_tag,
         );
         let elapsed = start.elapsed();
-        
+
         assert!(result.is_ok(), "decryption should succeed with correct key");
         correct_times.push(elapsed);
     }
@@ -176,17 +177,19 @@ fn timing_correct_vs_incorrect_key() {
             &encrypted.auth_tag,
         );
         let elapsed = start.elapsed();
-        
+
         assert!(result.is_err(), "decryption should fail with incorrect key");
         incorrect_times.push(elapsed);
     }
 
-    let correct_avg = correct_times.iter().sum::<std::time::Duration>() / correct_times.len() as u32;
-    let incorrect_avg = incorrect_times.iter().sum::<std::time::Duration>() / incorrect_times.len() as u32;
+    let correct_avg =
+        correct_times.iter().sum::<std::time::Duration>() / correct_times.len() as u32;
+    let incorrect_avg =
+        incorrect_times.iter().sum::<std::time::Duration>() / incorrect_times.len() as u32;
 
     println!("\nCorrect Key Average Time: {:?}", correct_avg);
     println!("Incorrect Key Average Time: {:?}", incorrect_avg);
-    
+
     let diff = if correct_avg.as_nanos() > incorrect_avg.as_nanos() {
         correct_avg.as_nanos() - incorrect_avg.as_nanos()
     } else {
@@ -200,7 +203,7 @@ fn timing_correct_vs_incorrect_key() {
 
 #[test]
 fn timing_tamper_position_independent() {
-    use qrd_core::encryption::{encrypt_payload, decrypt_payload, EncryptionConfig};
+    use qrd_core::encryption::{decrypt_payload, encrypt_payload, EncryptionConfig};
 
     const ITERATIONS_PER_POSITION: usize = 30;
     const PLAINTEXT: &[u8] = b"this is a longer test message to ensure we have enough data";
@@ -221,7 +224,11 @@ fn timing_tamper_position_independent() {
     println!("╚════════════════════════════════════════════════════════════╝");
 
     // Test tampering at different positions
-    let positions = vec![0, encrypted.ciphertext.len() / 2, encrypted.ciphertext.len() - 1];
+    let positions = vec![
+        0,
+        encrypted.ciphertext.len() / 2,
+        encrypted.ciphertext.len() - 1,
+    ];
     let mut position_times = Vec::new();
 
     for (_idx, pos) in positions.iter().enumerate() {
@@ -230,19 +237,17 @@ fn timing_tamper_position_independent() {
         for _ in 0..ITERATIONS_PER_POSITION {
             let mut tampered = encrypted.ciphertext.clone();
             if *pos < tampered.len() {
-                tampered[*pos] ^= 0xFF;  // Flip all bits at this position
+                tampered[*pos] ^= 0xFF; // Flip all bits at this position
             }
 
             let start = Instant::now();
-            let result = decrypt_payload(
-                &tampered,
-                &key,
-                &encrypted.nonce,
-                &encrypted.auth_tag,
-            );
+            let result = decrypt_payload(&tampered, &key, &encrypted.nonce, &encrypted.auth_tag);
             let elapsed = start.elapsed();
 
-            assert!(result.is_err(), "tampered ciphertext should fail authentication");
+            assert!(
+                result.is_err(),
+                "tampered ciphertext should fail authentication"
+            );
             tamper_times.push(elapsed);
         }
 
@@ -263,7 +268,7 @@ fn timing_tamper_position_independent() {
     };
 
     println!("\nTiming Variance Across Positions: {:.2}%", variance);
-    
+
     if variance < 10.0 {
         println!("✅ PASS: Tampering position has minimal timing impact");
         println!("   → Indicates constant-time authentication verification");
@@ -316,7 +321,12 @@ fn timing_key_length_independent() {
         let avg_time = times.iter().sum::<std::time::Duration>() / times.len() as u32;
         derivation_times.push(avg_time);
 
-        println!("Column '{}' (length {}): {:?}", col_name, col_name.len(), avg_time);
+        println!(
+            "Column '{}' (length {}): {:?}",
+            col_name,
+            col_name.len(),
+            avg_time
+        );
     }
 
     let min_time = derivation_times.iter().min().copied().unwrap_or_default();
@@ -329,7 +339,7 @@ fn timing_key_length_independent() {
     };
 
     println!("\nTiming Variance: {:.2}%", variance);
-    
+
     // Note: HKDF expands to constant output size (32 bytes), but info string varies
     // Small timing differences are acceptable
     println!("✅ PASS: Key derivation timing acceptable");

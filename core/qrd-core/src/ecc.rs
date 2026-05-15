@@ -1,6 +1,6 @@
 use crate::error::{QrdError, Result};
-use reed_solomon_erasure::ReedSolomon;
 use reed_solomon_erasure::galois_8::Field as Gf8;
+use reed_solomon_erasure::ReedSolomon;
 // The crate provides GF implementations; keep a minimal GF helper for a few
 // low-level unit tests that assert basic finite-field division behaviour.
 const GF_PRIMITIVE: u16 = 0x11d;
@@ -180,8 +180,7 @@ pub fn recover_missing_chunk(
     if missing_count > config.recovery_capacity() {
         return Err(QrdError::InvalidSchema(format!(
             "cannot recover {} missing chunks (only {} parity chunks available)",
-            missing_count,
-            config.parity_chunks
+            missing_count, config.parity_chunks
         )));
     }
 
@@ -205,7 +204,7 @@ pub fn recover_missing_chunk(
 
     // Build vector of Option<Vec<u8>> for reconstruct API. Present shards
     // are cloned; missing shards are left as None and will be reconstructed.
-    let mut shards_opt: Vec<Option<Vec<u8>>> = data.iter().map(|o| o.clone()).collect();
+    let mut shards_opt: Vec<Option<Vec<u8>>> = data.to_vec();
 
     r.reconstruct(&mut shards_opt)
         .map_err(|e| QrdError::InvalidSchema(format!("reed-solomon reconstruct failed: {}", e)))?;
@@ -329,7 +328,12 @@ mod tests {
         let data = vec![vec![1u8, 2, 3], vec![4, 5, 6]];
         let config = ReedSolomonConfig::new(2, 2).expect("config should be valid");
         let parity = encode(&data, config).expect("ecc should encode");
-        let corrupted = vec![Some(data[0].clone()), Some(data[1].clone()), None, Some(parity[1].clone())];
+        let corrupted = vec![
+            Some(data[0].clone()),
+            Some(data[1].clone()),
+            None,
+            Some(parity[1].clone()),
+        ];
         let recovered = recover_missing_chunk(&corrupted, config).expect("recovery should work");
         assert_eq!(recovered, parity[0]);
     }

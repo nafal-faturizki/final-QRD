@@ -1,6 +1,6 @@
 /// Ed25519 digital signature operations for schema signing and verification
 use crate::error::{QrdError, Result};
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey, Signer, Verifier};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::thread_rng;
 
 /// Ed25519 signing and verification configuration
@@ -23,7 +23,7 @@ impl SigningKeyPair {
         // Generate random seed bytes
         use rand::RngCore;
         csprng.fill_bytes(&mut seed_bytes);
-        
+
         let signing_key = SigningKey::from_bytes(&seed_bytes);
         Self { signing_key }
     }
@@ -80,9 +80,7 @@ impl VerifyingKeyPair {
     /// Verifies a signature of a schema fingerprint
     pub fn verify_signature(&self, schema_id: &[u8; 8], signature_bytes: &[u8]) -> Result<()> {
         if signature_bytes.len() != SIGNATURE_SIZE {
-            return Err(QrdError::InvalidSchema(
-                "signature must be 64 bytes".into(),
-            ));
+            return Err(QrdError::InvalidSchema("signature must be 64 bytes".into()));
         }
 
         let mut sig_array = [0u8; SIGNATURE_SIZE];
@@ -91,17 +89,13 @@ impl VerifyingKeyPair {
 
         self.verifying_key
             .verify(schema_id, &signature)
-            .map_err(|e| {
-                QrdError::InvalidSchema(format!("signature verification failed: {}", e))
-            })
+            .map_err(|e| QrdError::InvalidSchema(format!("signature verification failed: {}", e)))
     }
 
     /// Verify an arbitrary message with a raw signature (compatibility helper)
     pub fn verify_message(&self, msg: &[u8], signature_bytes: &[u8]) -> Result<()> {
         if signature_bytes.len() != SIGNATURE_SIZE {
-            return Err(QrdError::InvalidSchema(
-                "signature must be 64 bytes".into(),
-            ));
+            return Err(QrdError::InvalidSchema("signature must be 64 bytes".into()));
         }
         let mut sig_array = [0u8; SIGNATURE_SIZE];
         sig_array.copy_from_slice(signature_bytes);
@@ -179,7 +173,7 @@ impl SchemaSignature {
     pub fn verify(&self, schema: &[u8]) -> Result<()> {
         if self.algorithm != SIGNATURE_ALGORITHM {
             return Err(QrdError::InvalidSchema(
-                format!("unsupported signature algorithm: {}", self.algorithm).into(),
+                format!("unsupported signature algorithm: {}", self.algorithm),
             ));
         }
 
@@ -203,8 +197,6 @@ impl SchemaSignature {
             let digest = hasher.finalize();
             fingerprint.copy_from_slice(&digest[..8]);
         }
-
-    
 
         let verifying_key = VerifyingKeyPair::from_bytes(&self.public_key)?;
         verifying_key.verify_signature(&fingerprint, &self.signature)
@@ -271,7 +263,9 @@ pub struct VerificationKey {
 impl VerificationKey {
     pub fn from_bytes(pubkey: &[u8]) -> Result<Self> {
         if pubkey.len() != PUBLIC_KEY_SIZE {
-            return Err(QrdError::InvalidSchema("public key must be 32 bytes".into()));
+            return Err(QrdError::InvalidSchema(
+                "public key must be 32 bytes".into(),
+            ));
         }
         let mut arr = [0u8; PUBLIC_KEY_SIZE];
         arr.copy_from_slice(pubkey);
